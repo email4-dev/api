@@ -1,0 +1,30 @@
+# Node/Bun dependencies
+node_modules
+bun.lockb
+
+# Build output
+dist
+build
+.out
+*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+bun-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+
+# Env files
+.env
+.env.*

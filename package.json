@@ -1,0 +1,26 @@
+{
+  "name": "email4.dev-api",
+  "version": "0.1.0",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "^1.2.12"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@layered/dns-records": "^2.3.0",
+    "@nats-io/jetstream": "^3.0.2",
+    "@nats-io/kv": "^3.0.2",
+    "@nats-io/obj": "^3.0.2",
+    "@nats-io/transport-node": "^3.0.2",
+    "@types/tldjs": "^2.3.4",
+    "altcha-lib": "^1.2.0",
+    "ip-regex": "^5.0.0",
+    "pocketbase": "^0.26.0",
+    "rambda": "9.4.2",
+    "spf-parse": "^1.0.4",
+    "tldjs": "^2.3.1"
+  }
+}
