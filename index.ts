@@ -27,7 +27,6 @@ const nc = await connect({ servers: Bun.env.NATS_HOST })
 const js = await jetstreamManager(nc)
 const objm = new Objm(nc)
 const hasher = new Bun.CryptoHasher("sha256")
-const encoder = new TextEncoder()
 const bucket = await objm.create("attachments", { storage: StorageType.File })
 
 nc.closed().then((err) => {
