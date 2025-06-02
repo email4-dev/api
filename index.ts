@@ -11,6 +11,8 @@ import { serve } from 'bun'
 
 const db = new PocketBase(Bun.env.POCKETBASE_URL)
 
+db.autoCancellation(false)
+
 console.log('Email4.dev API starting...')
 
 await db.collection('_superusers').authWithPassword(
