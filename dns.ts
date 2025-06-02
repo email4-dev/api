@@ -9,7 +9,7 @@ export const verifyDomain = async (domain: string, verification: string) => {
         message: ''
     }
     const records = await getDnsRecords(domain, 'TXT')
-    const verRecord = records.filter(record => record.data.includes('mail4.dev-verification='))
+    const verRecord = records.filter(record => record.data.includes('email4.dev-verification='))
     switch(verRecord.length) {
         case 0:
             result.message = 'TXT verification record missing'
