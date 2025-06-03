@@ -166,7 +166,7 @@ serve({
             }
             if(!redirectFailUrl) {
                 const redirFail = type === 'form' ? formData.get('redir_fail') : formData.redir_fail || null
-                redirectFailUrl = redirFail ? redirFail : req.headers.get("referer")
+                redirectFailUrl = redirFail ? redirFail : redirectSuccessUrl ? redirectSuccessUrl : req.headers.get("referer")
             }
             // @ts-expect-error
             const redirectSuccess: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(redirectSuccessUrl) && d.verified.includes('ownership'))
