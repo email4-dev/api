@@ -85,7 +85,7 @@ const sendResponse = (type: string, status: number, payload: any, error: boolean
 }
 
 const sendRedirect = (url: string, message: string, key: string = 'result') => {
-    return Response.redirect(`${url}&${key}=${encodeURIComponent(message)}`, 303)
+    return Response.redirect(`${url}?${key}=${encodeURIComponent(message)}`, 303)
 }
 
 const sendError = (type: string, status: number, message: string, redirect: string | null = null) => {
