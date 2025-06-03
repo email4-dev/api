@@ -157,22 +157,37 @@ serve({
                 console.warn('Form not found:', form_id)
                 return sendError(type, 404, 'Form not found')
             }
+            // check redirect targets
+            let redirectSuccessUrl = form.expand?.handler.redirect_success
+            let redirectFailUrl = form.expand?.handler.redirect_fail
+            if(!redirectSuccessUrl) {
+                const redirSuccess = type === 'form' ? formData.get('redir_success') : formData.redir_success || null
+                redirectSuccessUrl = redirSuccess ? redirSuccess : req.headers.get("referer")
+            }
+            if(!redirectFailUrl) {
+                const redirFail = type === 'form' ? formData.get('redir_fail') : formData.redir_fail || null
+                redirectFailUrl = redirFail ? redirFail : req.headers.get("referer")
+            }
             // @ts-expect-error
-            const redirectFail: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(form.expand?.handler.redirect_fail) && d.verified.includes('ownership'))
+            const redirectSuccess: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(redirectSuccessUrl) && d.verified.includes('ownership'))
             // @ts-expect-error
-            const redirectSuccess: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(form.expand?.handler.redirect_success) && d.verified.includes('ownership'))
+            const redirectFail: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(redirectFailUrl) && d.verified.includes('ownership'))
+            if(!redirectSuccess || !redirectFail) {
+                console.warn(`Domain doesn't match redirect configuration for form:`, form_id)
+                return sendError(type, 400, `Redirect doesn't match domain`, null)
+            }
             // check altcha
             if(form.expand?.handler.altcha) {
                 const altchaData = type === 'form' ? formData.get('altcha') : formData.altcha
                 if(!altchaData) {
                     console.warn('Altcha field missing in form:', form_id)
-                    return sendError(type, 403, 'Altcha field missing', redirectFail ? form.expand?.handler.redirect_fail : null)
+                    return sendError(type, 403, 'Altcha field missing', redirectFailUrl)
                 } else {
                     const payload = JSON.parse(atob(altchaData))
                     const altchaResult = await verify(payload, form.handler)
                     if(!altchaResult) {
                         console.warn('Altcha mismatch for form:', form_id)
-                        return sendError(type, 403, 'Altcha mismatch', redirectFail ? form.expand?.handler.redirect_fail : null)
+                        return sendError(type, 403, 'Altcha mismatch', redirectFailUrl)
                     }
                 }
             }
@@ -181,7 +196,7 @@ serve({
                 const honeypotData = type === 'form' ? formData.get(form.expand?.handler.honeypot) : formData[form.expand?.handler.honeypot]
                 if(!honeypotData) {
                     console.warn('Honeypot enabled but not implemented', req)
-                    return sendError(type, 400, 'Honeypot missing', redirectFail ? form.expand?.handler.redirect_fail : null)
+                    return sendError(type, 400, 'Honeypot missing', redirectFailUrl)
                 } else {
                     if(honeypotData.length) {
                         console.info('Bot detected!', req)
@@ -195,7 +210,7 @@ serve({
             // loop fields
             if(type === 'form') {
                 for (const key of formData.keys()) {
-                    if(key === 'altcha') continue
+                    if(key === 'altcha' || key === 'redir_success' || key === 'redir_fail') continue
                     if(form.expand?.handler.honeypot.length && key === form.expand?.handler.honeypot) continue
                     const values: string[]|File[] = formData.getAll(key)
                     if(values[0] instanceof File) {
@@ -216,7 +231,7 @@ serve({
                 }
             } else {
                 for (const key of Object.keys(formData)) {
-                    if(key === 'altcha') continue
+                    if(key === 'altcha' || key === 'redir_success' || key === 'redir_fail') continue
                     if(form.expand?.handler.honeypot.length && key === form.expand?.handler.honeypot) continue
                     if(formData[key][0].constructor.name === "Object" && Object.hasOwn(formData[key][0], 'filename')) {
                         for(let i=0;i<formData[key].length;i++) {
@@ -248,7 +263,7 @@ serve({
             nc.publish(`message.${form_id}`, data, { headers: msgHeaders })
 
             return type === 'form' ?
-                sendRedirect(redirectSuccess ? form.expand?.handler.redirect_success : req.headers.get("referer"), 'true', 'success') :
+                sendRedirect(redirectSuccessUrl, 'true', 'success') :
                 sendResponse('json', 200, {success: true})
         }
     }
