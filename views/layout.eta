@@ -217,6 +217,18 @@
             display:grid;
             gap:2rem;
         }
+        .otp-text{
+            color: var(--secondary-color);
+        }
+         .pin-input {
+            width: 40px;
+            height: 50px;
+            text-align: center;
+            font-size: 18px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
     </style>
 </head>
 <body>

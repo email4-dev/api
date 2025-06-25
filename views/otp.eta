@@ -4,15 +4,15 @@
     <div class="section-container">
         <div class="wrapper">
             <h1>Authorization Required</h1>
-            <p>In order to fulfill your request an OTP has been emailed to the email address associated with the requested attachments. Input the OTP below to continue</p>
+            <p class="otp-text">In order to fulfill your request an OTP has been emailed to the email address associated with the requested attachments. Input the OTP below to continue</p>
             <div>
                 <form method="POST">
-                    <input type="text" pattern="[0-9]{1}" name="otp1" value="" autofocus onkeydown="tab()" />
-                    <input type="text" pattern="[0-9]{1}" name="otp2" value="" onkeydown="tab()" />
-                    <input type="text" pattern="[0-9]{1}" name="otp3" value="" onkeydown="tab()" />
-                    <input type="text" pattern="[0-9]{1}" name="otp4" value="" onkeydown="tab()" />
-                    <input type="text" pattern="[0-9]{1}" name="otp5" value="" onkeydown="tab()" />
-                    <input type="text" pattern="[0-9]{1}" name="otp6" value="" onkeydown="tab()" />
+                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp1" value="" autofocus onkeydown="tab()" />
+                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp2" value="" onkeydown="tab()" />
+                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp3" value="" onkeydown="tab()" />
+                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp4" value="" onkeydown="tab()" />
+                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp5" value="" onkeydown="tab()" />
+                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp6" value="" onkeydown="tab()" />
                     <input type="hidden" name="otp" value="" />
                 </form>
             </div>
