@@ -7,12 +7,12 @@
             <p class="otp-text">In order to fulfill your request an OTP has been emailed to the email address associated with the requested attachments. Input the OTP below to continue</p>
             <div>
                 <form method="POST">
-                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp1" value="" autofocus onkeydown="tab()" />
-                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp2" value="" onkeydown="tab()" />
-                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp3" value="" onkeydown="tab()" />
-                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp4" value="" onkeydown="tab()" />
-                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp5" value="" onkeydown="tab()" />
-                    <input type="text" class="pin-input" pattern="[0-9]{1}" name="otp6" value="" onkeydown="tab()" />
+                    <input type="number" min="0" max="9" name="otp1" value="" autofocus onkeydown="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp2" value="" onkeydown="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp3" value="" onkeydown="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp4" value="" onkeydown="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp5" value="" onkeydown="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp6" value="" onkeydown="tab(this)" />
                     <input type="hidden" name="otp" value="" />
                 </form>
             </div>
@@ -21,13 +21,13 @@
 </div>
 
 <script>
-function tab(e) {
-    document.querySelector('input[name="otp"]').value += e.target.value
-    if(e.target.name === "otp6") {
+function tab(input) {
+    document.querySelector('input[name="otp"]').value += input.value
+    if(input.name === "otp6") {
         document.querySelector('form input[type="text"]').forEach(el => el.disabled = true)
         document.querySelector('form').submit()
     } else {
-        e.target.nextSibling.focus()
+        input.nextElementSibling.focus()
     }
 }
 </script>
