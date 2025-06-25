@@ -2,6 +2,7 @@
 
 <div>
     <div class="downloads-section">
+        <h2 class="downloads-title">Download Files</h2>
          <table class="downloads-table">
             <thead>
                 <tr>
