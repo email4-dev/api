@@ -131,19 +131,18 @@
             background: var(--secondary-color);
             color: white;
             width: 100%;
-            padding: 2rem 1rem;
+            padding: 2rem;
             text-align: center;
             margin-top: auto;
         }
         .downloads-section {
-            background: var(--white);
             border-radius: 16px;
             padding: 2rem;
-            box-shadow: var(--shadow-md);
             margin-bottom: 2rem;
             animation: fadeInUp 0.8s ease-out 0.2s both;
         }
         .downloads-table {
+            background-color: white;
             width: 100%;
             border-collapse: collapse;
             border-radius: var(--border-radius);
@@ -170,16 +169,14 @@
             border-bottom: 1px solid var(--light-gray);
             vertical-align: middle;
         }
-
-        .downloads-table tr:hover {
-            background-color: rgba(9, 172, 233, 0.05);
-            transition: background-color 0.2s ease;
-        }
         .footer a {
             color: var(--primary-color);
             text-decoration: none;
             opacity: 0.8;
             transition: opacity 0.3s ease;
+        }
+        .logo{
+            padding:3rem;
         }
     </style>
 </head>
