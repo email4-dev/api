@@ -28,7 +28,7 @@
         <%= it.limit %> more downloads available
         <% } %>
     </div>
-    <button onclick="download">Download All</a>
+    <button onclick="download()">Download<%= it.files.length > 1 ? ' All' : '' %></a>
 </div>
 
 <script>
@@ -51,7 +51,7 @@ async function download() {
         if (!response.ok) throw new Error('Download failed')
 
         const contentDisposition = response.headers.get('Content-Disposition')
-        const filename = contentDisposition?.match(/filename="?(.+)"?/)?.[1] || 'attachments.zip'
+        const filename = contentDisposition?.match(/filename="(.+)"/)?.[1] || 'attachments.zip'
 
         const reader = response.body?.getReader()
         if (!reader) throw new Error('No readable stream')
@@ -68,8 +68,10 @@ async function download() {
             receivedLength += value.length
             
             // Update progress (0-100)
-            const progress = Math.round((receivedLength / contentLength) * 100)
-            document.querySelector('button').setAttribute('done', progress)
+            if (contentLength > 0) {
+                const progress = Math.round((receivedLength / contentLength) * 100)
+                document.querySelector('button').setAttribute('done', progress)
+            }
         }
 
         const blob = new Blob(chunks)
@@ -78,6 +80,7 @@ async function download() {
         const a = document.createElement('a')
         a.href = url
         a.download = filename
+        a.style.display = 'none'
         document.body.appendChild(a)
         a.click()
 

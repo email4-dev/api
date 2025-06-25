@@ -262,6 +262,7 @@ serve({
 
         return new Response(await eta.renderAsync('download', {
             pageTitle: 'Download',
+            downloadUrl: `${Bun.env.API_URL}download/${hex}`,
             limit: form.retention_limit > 0 && form.retention_type === 'downloads' ? form.retention_limit - parseInt(download.count) : null,
             expiry,
             files: await Promise.all(fileData.map(async (f:MessageAttachment) => {
@@ -307,19 +308,35 @@ serve({
                 if(Bun.env.DEBUG == "true") console.warn('File list empty', download)
                 return sendError('json', 404, 'File list empty')
             }
+            const timestamp = Date.now()
             if(fileData.length > 1) {
-                const zipPath = join(tmpdir(), `attachments-${Date.now()}.zip`)
+                const zipPath = join(tmpdir(), `attachments-${timestamp}.zip`)
                 const output = createWriteStream(zipPath)
                 const archive = Archiver('zip', { zlib: { level: 5 } })
-                archive.pipe(output)
-                for (const file of fileData) {
-                    archive.append(await minio.getObject('attachments', file.key), { name: file.filename })
-                }
-                await archive.finalize()
+
+                await new Promise(async (resolve, reject) => {
+                    archive.pipe(output)
+                    
+                    // Handle archive errors
+                    archive.on('error', err => reject(err))
+                    output.on('error', err => reject(err))
+                    output.on('close', () => resolve(true))
+
+                    try {
+                        for (const file of fileData) {
+                            const fileStream = await minio.getObject('attachments', file.key)
+                            archive.append(fileStream, { name: file.filename })
+                        }
+                        await archive.finalize()
+                    } catch (err) {
+                        reject(err)
+                    }
+                })
 
                 const fileStream = createReadStream(zipPath)
+                const stats = await stat(zipPath)
                 // Clean up
-                fileStream.on('close', async () => {
+                fileStream.on('end', async () => {
                     unlinkSync(zipPath)
                     if(form.retention_limit !== 0 && form.retention_type === 'downloads' && downloadCount === form.retention_limit - 1) {
                         for (const file of fileData) {
@@ -332,8 +349,8 @@ serve({
                     headers: {
                         ...cors,
                         'Content-Type': 'application/zip',
-                        'Content-Disposition': `attachment; filename="attachments-${Date.now()}.zip"`,
-                        'Content-Length': `${(await stat(zipPath)).size}` || '',
+                        'Content-Disposition': `attachment; filename="attachments-${timestamp}.zip"`,
+                        'Content-Length': `${stats.size}` || '',
                     },
                 })
             } else {
