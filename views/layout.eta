@@ -220,7 +220,7 @@
 </head>
 <body>
     <div class="logo">
-        <img alt ="email4dev" src="https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg"/>
+        <img alt ="email4dev" id="logo" src="https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg"/>
     </div>
     <button id="toggle-dark-mode" class="darkmode">
       <svg id="theme-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
