@@ -197,7 +197,7 @@ serve({
         switch(req.method) {
             // @ts-expect-error
             case "GET":
-                if(!form.protected_attachments) break
+                if(!form.protect_attachments) break
             case "DELETE":
                 const otp = generateOTP()
                 await valkey.set(`otp:${sessionId}`, otp)
