@@ -20,7 +20,7 @@
             </tbody>
          </table>
     </div>
-    <div class="alert>
+    <div class="alert">
         <p><% if (it.expiry !== null) { %>
         Available until <span id="expiry"></span>
         <% } %>
