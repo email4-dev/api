@@ -20,6 +20,20 @@
             --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
             --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
+        .dark-mode {
+            --primary-color: #0dcaf0;
+            --background-color: #121826;
+            --secondary-color: #e0e5ed;
+            --accent-light: #4b3f8a;
+            --gradient-primary: linear-gradient(135deg, #0dcaf0, #60c6f8);
+            --gradient-background: linear-gradient(135deg, var(--background-color) 0%, #1a2438 100%);
+            --gray-color: #9ba8bc;
+            --light-gray: #2a3446;
+            --white: #1e2638;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.15);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.25), 0 2px 4px -1px rgba(0, 0, 0, 0.15);
+        }
 
         body {
             font-family: system-ui, sans-serif;
@@ -131,13 +145,11 @@
             background: var(--secondary-color);
             color: white;
             width: 100%;
-            padding: 2rem;
+            padding: 2rem 0;
             text-align: center;
             margin-top: auto;
         }
         .downloads-section {
-            border-radius: 16px;
-            padding: 2rem;
             margin-bottom: 2rem;
             animation: fadeInUp 0.8s ease-out 0.2s both;
         }
@@ -176,7 +188,18 @@
             transition: opacity 0.3s ease;
         }
         .logo{
-            padding:3rem;
+            padding-top:4rem;
+        }
+        .darkmode{
+            position: fixed;
+            bottom: 2.5rem;
+            right: 2.5rem;
+            z-index: 1000;
+        }
+        .alert {
+            background-color: #fff3cd;
+            color: #856404;
+            border-left-color: #ffc107;
         }
     </style>
 </head>
@@ -184,7 +207,7 @@
     <div class="logo">
         <img alt ="email4dev" src="https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg"/>
     </div>
-
+    <button id="toggle-dark-mode" class="darkmode">Toggle Dark Mode</button>
     <%~ it.body %>
 
     <div class="footer">
