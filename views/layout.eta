@@ -57,7 +57,7 @@
             padding: 3rem var(--padding, 1rem); 
         }
 
-        .downloads-section button {
+        .wrapper button {
             text-decoration: none;
             padding: 0.75rem 1.5rem;
             font-size: 1.1rem;
@@ -70,14 +70,14 @@
             transition: all 0.4s;
         }
 
-        .downloads-section button:hover {
+        .wrapper button:hover {
             transform: translateY(-10px);
             box-shadow: 0 7px 0 -2px #f85959,
                         0 15px 0 -4px #39a2db,
                         0 16px 10px -3px rgba(57, 162, 219, 0.7);
         }
 
-        .downloads-section button:active {
+        .wrapper button:active {
             transition: all 0.2s;
             transform: translateY(-5px);
             box-shadow: 0 2px 0 -2px #f85959,
@@ -85,13 +85,13 @@
                     0 12px 10px -3px rgba(57, 162, 219, 0.7);
         }
 
-        .downloads-section button[disabled] {
+        .wrapper button[disabled] {
             background: var(--gray-color);
             box-shadow: initial;
             position: relative;
         }
 
-        .downloads-section button[disabled]::before {
+        .wrapper button[disabled]::before {
             position: absolute;
             top: 0;
             left: 0;
@@ -154,7 +154,8 @@
             animation: fadeInUp 0.8s ease-out 0.2s both;
         }
         .downloads-table {
-            background-color: var(--secondary-color);
+            background-color: var(--white);
+            color: var(--secondary-color);
             width: 100%;
             border-collapse: collapse;
             border-radius: var(--border-radius);
@@ -191,8 +192,9 @@
             padding-top:4rem;
         }
         .darkmode{
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
+            width:3rem;
+            height:3rem;
+            border-radius: 100%;
             border: none;
             background-color: #333;
             color: white;
