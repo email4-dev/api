@@ -211,6 +211,7 @@
             color: #856404;
             border-left-color: #ffc107;
             padding:0.5rem;
+            border-radius: var(--border-radius);
         }
         .wrapper{
             display:grid;
