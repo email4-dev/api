@@ -57,7 +57,7 @@
             padding: 3rem var(--padding, 1rem); 
         }
 
-        button {
+        .downloads-section button {
             text-decoration: none;
             padding: 0.75rem 1.5rem;
             font-size: 1.1rem;
@@ -70,14 +70,14 @@
             transition: all 0.4s;
         }
 
-        button:hover {
+        .downloads-section button:hover {
             transform: translateY(-10px);
             box-shadow: 0 7px 0 -2px #f85959,
                         0 15px 0 -4px #39a2db,
                         0 16px 10px -3px rgba(57, 162, 219, 0.7);
         }
 
-        button:active {
+        .downloads-section button:active {
             transition: all 0.2s;
             transform: translateY(-5px);
             box-shadow: 0 2px 0 -2px #f85959,
@@ -85,13 +85,13 @@
                     0 12px 10px -3px rgba(57, 162, 219, 0.7);
         }
 
-        button[disabled] {
+        .downloads-section button[disabled] {
             background: var(--gray-color);
             box-shadow: initial;
             position: relative;
         }
 
-        button[disabled]::before {
+        .downloads-section button[disabled]::before {
             position: absolute;
             top: 0;
             left: 0;
@@ -142,8 +142,8 @@
             font-weight: 500;
         }
         .footer {
-            background: var(--secondary-color);
-            color: white;
+            background: var(--background-color);
+            color: var(--secondary-color);
             width: 100%;
             padding: 2rem 0;
             text-align: center;
@@ -154,7 +154,7 @@
             animation: fadeInUp 0.8s ease-out 0.2s both;
         }
         .downloads-table {
-            background-color: white;
+            background-color: var(--secondary-color);
             width: 100%;
             border-collapse: collapse;
             border-radius: var(--border-radius);
@@ -162,7 +162,7 @@
             box-shadow: var(--shadow-sm);
         }
         .downloads-table th {
-            background: var(--gradient-primary);
+            background: var(--primary-color);
             color: white;
             padding: 1rem;
             text-align: left;
@@ -191,6 +191,14 @@
             padding-top:4rem;
         }
         .darkmode{
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            border: none;
+            background-color: #333;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: background-color 0.3s ease;
             position: fixed;
             bottom: 2.5rem;
             right: 2.5rem;
@@ -200,6 +208,11 @@
             background-color: #fff3cd;
             color: #856404;
             border-left-color: #ffc107;
+            padding:0.5rem;
+        }
+        .wrapper{
+            display:grid;
+            gap:2rem;
         }
     </style>
 </head>
@@ -207,7 +220,12 @@
     <div class="logo">
         <img alt ="email4dev" src="https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg"/>
     </div>
-    <button id="toggle-dark-mode" class="darkmode">Toggle Dark Mode</button>
+    <button id="toggle-dark-mode" class="darkmode">
+      <svg id="theme-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+        <path id="moon-icon" d="M21.752 15.002A9 9 0 1112 3a7.5 7.5 0 009.752 12.002z" />
+      </svg>
+  
+  </button>
     <%~ it.body %>
 
     <div class="footer">

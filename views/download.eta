@@ -1,6 +1,6 @@
 <% layout("layout") %>
 
-<div>
+<div class="wrapper">
     <div class="downloads-section">
         <h2 class="downloads-title">Download Files</h2>
          <table class="downloads-table">
@@ -21,12 +21,12 @@
          </table>
     </div>
     <div class="alert">
-        <p><% if (it.expiry !== null) { %>
+        <% if (it.expiry !== null) { %>
         Available until <span id="expiry"></span>
         <% } %>
         <% if (it.limit !== null) { %>
         <%= it.limit %> more downloads available
-        <% } %></p>
+        <% } %>
     </div>
     <button onclick="download()">Download<%= it.files.length > 1 ? ' All' : '' %></a>
 </div>
@@ -92,13 +92,32 @@ async function download() {
         console.error('Download error:', error)
     }
 }
+const lightLogo = "https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg";
+const darkLogo = "https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/17477313198241737541073000logo-final.svg";
 const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 let darkMode = prefersDark;
+
+function setIcon(mode) {
+    const themeIcon = document.getElementById("theme-icon");
+    const isDark = mode === "dark";
+
+    themeIcon.innerHTML = isDark
+        ? '<path d="M21.752 15.002A9 9 0 1112 3a7.5 7.5 0 009.752 12.002z" />' 
+        : '<path d="M12 4.5a1 1 0 011 1v1.5a1 1 0 01-2 0V5.5a1 1 0 011-1zm6.364 1.636a1 1 0 011.414 0l1.061 1.061a1 1 0 01-1.414 1.414l-1.061-1.061a1 1 0 010-1.414zM19.5 11a1 1 0 011 1v1.5a1 1 0 01-2 0V12a1 1 0 011-1zm-7.5 6a1 1 0 011 1v1.5a1 1 0 01-2 0V18a1 1 0 011-1zm-6.364-1.636a1 1 0 00-1.414 0l-1.061 1.061a1 1 0 001.414 1.414l1.061-1.061a1 1 0 000-1.414zM4.5 11a1 1 0 00-1 1v1.5a1 1 0 002 0V12a1 1 0 00-1-1zm1.636-6.364a1 1 0 00-1.414 0L3.661 5.697a1 1 0 001.414 1.414l1.061-1.061a1 1 0 000-1.414zM12 7a5 5 0 100 10 5 5 0 000-10z" />';
+
+    const logo = document.getElementById("theme-logo");
+    if (logo) {
+        logo.src = isDark ? darkLogo : lightLogo;
+    }
+
+}
 
 function toggleDarkMode() {
     darkMode = !darkMode;
     document.body.classList.toggle("dark-mode", darkMode);
-    localStorage.setItem("theme", darkMode ? "dark" : "light");
+    const mode = darkMode ? "dark" : "light";
+    localStorage.setItem("theme", mode);
+    setIcon(mode);
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -107,7 +126,7 @@ window.addEventListener("DOMContentLoaded", () => {
         darkMode = true;
         document.body.classList.add("dark-mode");
     }
-
+    setIcon(darkMode ? "dark" : "light");
     document.getElementById("toggle-dark-mode").addEventListener("click", toggleDarkMode);
 });
 </script>
