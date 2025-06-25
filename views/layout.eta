@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email4dev - <%= it.pageTitle %></title>
+    <link rel="icon" type="image/png" sizes="32x32" href="https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg">
+    <style>
+        :root {
+            --primary-color: #09ace9;
+            --background-color: #f3f3fc;
+            --secondary-color: #0d213d;
+            --accent-light: #ddd6fe;
+            --gradient-primary: linear-gradient(135deg, var(--primary-color), #38bdf8);
+            --gradient-background: linear-gradient(135deg, var(--background-color) 0%, #e6f7ff 100%);
+            --gray-color: #718096;
+            --light-gray: #e2e8f0;
+            --white: #ffffff;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            color: var(--color);
+            line-height: 1.6;
+            font-size: 1rem;
+            background: var(--background-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 100vh; 
+            margin: 0; 
+            gap: 2rem; 
+        }
+
+        .section-container {
+            max-width: var(--max-width, 1200px);
+            margin: 0 auto;
+            padding: 3rem var(--padding, 1rem); 
+        }
+
+        button {
+            text-decoration: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            background-color: var(--primary-color);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            transition: all 0.4s;
+        }
+
+        button:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 7px 0 -2px #f85959,
+                        0 15px 0 -4px #39a2db,
+                        0 16px 10px -3px rgba(57, 162, 219, 0.7);
+        }
+
+        button:active {
+            transition: all 0.2s;
+            transform: translateY(-5px);
+            box-shadow: 0 2px 0 -2px #f85959,
+                    0 8px 0 -4px #39a2db,
+                    0 12px 10px -3px rgba(57, 162, 219, 0.7);
+        }
+
+        button[disabled] {
+            background: var(--gray-color);
+            box-shadow: initial;
+            position: relative;
+        }
+
+        button[disabled]::before {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: attr(data-done);
+            background-color: var(--primary-color);
+        }
+
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        h1 {
+            color: var(--secondary-color);
+            font-size: 2rem;
+            font-weight: 500;
+        }
+
+        .attachments{
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+            flex-direction: column;
+        }
+
+        .attachment-item {
+            background: var(--white);
+            border: 1px solid var(--light-gray);
+            border-radius: var(--border-radius);
+            padding: 16px 24px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+
+        .attachment-item:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+
+        .attachment-item p {
+            margin: 0;
+            color: var(--secondary-color);
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="logo">
+        <img alt ="email4dev" src="https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg"/>
+    </div>
+
+    <%~ it.body %>
+
+    <div class="footer">
+        <p>Powered by <a href="https://email4.dev" target="_new">Email4.dev</a></p>
+    </div>
+</body>
+</html>

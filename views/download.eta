@@ -1,0 +1,78 @@
+<% layout("layout") %>
+
+<div>
+    <div class="attachments">
+        <% it.files.forEach(function(file){ %>
+        <p><%= file.name %> | <%= file.size %></p>
+        <% }) %>
+    </div>
+    <div>
+        <% if (it.expiry !== null) { %>
+        Available until <span id="expiry"></span>
+        <% } %>
+        <% if (it.limit !== null) { %>
+        <%= it.limit %> more downloads available
+        <% } %>
+    </div>
+    <button onclick="download">Download All</a>
+</div>
+
+<script>
+<% if (it.expiry !== null) { %>
+document.addEventListener('DOMContentLoaded', function () {
+    const expiry = new Date(<%= it.expiry %>)
+    document.getElementById('expiry').innerText = expiry.toLocaleString()
+}, false)
+<% } %>
+async function download() {
+    document.querySelector('button').setAttribute('disabled', 'disabled')
+    document.querySelector('button').setAttribute('done', '0')
+    try {
+        const response = await fetch('<%= it.downloadUrl %>', {
+            headers: {
+            'Content-Type': 'application/json',
+            }
+        })
+
+        if (!response.ok) throw new Error('Download failed')
+
+        const contentDisposition = response.headers.get('Content-Disposition')
+        const filename = contentDisposition?.match(/filename="?(.+)"?/)?.[1] || 'attachments.zip'
+
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('No readable stream')
+
+        const contentLength = +(response.headers.get('Content-Length') || 0)
+        let receivedLength = 0
+        const chunks = []
+
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            
+            chunks.push(value)
+            receivedLength += value.length
+            
+            // Update progress (0-100)
+            const progress = Math.round((receivedLength / contentLength) * 100)
+            document.querySelector('button').setAttribute('done', progress)
+        }
+
+        const blob = new Blob(chunks)
+        const url = URL.createObjectURL(blob)
+
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+
+        setTimeout(() => {
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        }, 100)
+    } catch (error) {
+        console.error('Download error:', error)
+    }
+}
+</script>

@@ -1,0 +1,33 @@
+<% layout("layout") %>
+
+<div>
+    <div class="section-container">
+        <div class="wrapper">
+            <h1>Authorization Required</h1>
+            <p>In order to fulfill your request an OTP has been emailed to the email address associated with the requested attachments. Input the OTP below to continue</p>
+            <div>
+                <form method="POST">
+                    <input type="text" pattern="[0-9]{1}" name="otp1" value="" autofocus onkeydown="tab()" />
+                    <input type="text" pattern="[0-9]{1}" name="otp2" value="" onkeydown="tab()" />
+                    <input type="text" pattern="[0-9]{1}" name="otp3" value="" onkeydown="tab()" />
+                    <input type="text" pattern="[0-9]{1}" name="otp4" value="" onkeydown="tab()" />
+                    <input type="text" pattern="[0-9]{1}" name="otp5" value="" onkeydown="tab()" />
+                    <input type="text" pattern="[0-9]{1}" name="otp6" value="" onkeydown="tab()" />
+                    <input type="hidden" name="otp" value="" />
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function tab(e) {
+    document.querySelector('input[name="otp"]').value += e.target.value
+    if(e.target.name === "otp6") {
+        document.querySelector('form input[type="text"]').forEach(el => el.disabled = true)
+        document.querySelector('form').submit()
+    } else {
+        e.target.nextSibling.focus()
+    }
+}
+</script>
