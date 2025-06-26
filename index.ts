@@ -757,7 +757,7 @@ const validateForm = async (form_id: string|null, origin: string) => {
                     handler_id: '',
                     error: {
                         status: 403,
-                        message: 'Domain not verified'
+                        message: (Bun.env.DEBUG == "true") ? verifyResult.message : 'Domain not verified'
                     }
                 }
             } else {
