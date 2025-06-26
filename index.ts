@@ -70,7 +70,7 @@ process.on("beforeExit", async () => {
 
 const cors = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'content-type'
 }
 
@@ -668,7 +668,7 @@ serve({
   },
   async fetch(req) {
     if (req.method === 'OPTIONS') {
-      return new Response(null, {
+      return new Response('Departed', {
         headers: cors
       })
     }
