@@ -5,29 +5,40 @@
         <div class="wrapper">
             <h1>Authorization Required</h1>
             <p class="otp-text">In order to fulfill your request an OTP has been emailed to the email address associated with the requested attachments. Input the OTP below to continue</p>
+            <% if (it.error) { %>
+            <div class="alert">Wrong OTP! Please try again.</div>
+            <% } %>
             <div>
                 <form method="POST">
-                    <input type="number" min="0" max="9" name="otp1" value="" autofocus onkeydown="tab(this)" />
-                    <input type="number" min="0" max="9" name="otp2" value="" onkeydown="tab(this)" />
-                    <input type="number" min="0" max="9" name="otp3" value="" onkeydown="tab(this)" />
-                    <input type="number" min="0" max="9" name="otp4" value="" onkeydown="tab(this)" />
-                    <input type="number" min="0" max="9" name="otp5" value="" onkeydown="tab(this)" />
-                    <input type="number" min="0" max="9" name="otp6" value="" onkeydown="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp1" value="" autofocus onkeyup="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp2" value="" onkeyup="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp3" value="" onkeyup="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp4" value="" onkeyup="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp5" value="" onkeyup="tab(this)" />
+                    <input type="number" min="0" max="9" name="otp6" value="" onkeyup="tab(this)" />
                     <input type="hidden" name="otp" value="" />
+                    <input type="hidden" name="action" value="<%= it.action %>" />
                 </form>
             </div>
+            <div class="alert">OTP expires at <span id="expiry"></span>. Refresh this page after expiry to request a new one.</div>
         </div>
     </div>
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+    const expiry = new Date(<%= it.otpExpiry %>)
+    document.getElementById('expiry').innerText = expiry.toLocaleString()
+}, false)
 function tab(input) {
-    document.querySelector('input[name="otp"]').value += input.value
-    if(input.name === "otp6") {
-        document.querySelector('form input[type="text"]').forEach(el => el.disabled = true)
-        document.querySelector('form').submit()
-    } else {
-        input.nextElementSibling.focus()
+    if(input.value.match(/[0-9]/)) {
+        document.querySelector('input[name="otp"]').value += input.value
+        if(input.name === "otp6") {
+            document.querySelectorAll('form input[type="number"]').forEach(el => el.disabled = true)
+            document.querySelector('form').submit()
+        } else {
+            input.nextElementSibling.focus()
+        }
     }
 }
 </script>

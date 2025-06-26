@@ -4,7 +4,7 @@
     <div class="section-container">
         <div class="wrapper">
             <h1>Error <%= it.errorNumber %></h1>
-            <p><%= it.errorMessage %></p>
+            <div class="alert"><%= it.errorMessage %></div>
         </div>
     </div>
 </div>

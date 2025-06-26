@@ -142,8 +142,8 @@ serve({
         }})
     },
     '/attachments/:hex': async (req:BunRequest) => {
-        if(["GET", "POST", "DELETE"].indexOf(req.method) === -1) {
-            return sendError('form', 405, 'HTTP method not supported')
+        if(!["GET", "POST"].includes(req.method)) {
+            return sendError('form', 405, 'Request method not supported')
         }
         if(Bun.env.DEBUG == "true") console.debug('Attachments init', req)
         // @ts-expect-error
@@ -194,61 +194,62 @@ serve({
                 secure: Bun.env.API_URL?.startsWith('https')
             })
         }
-        switch(req.method) {
-            // @ts-expect-error
-            case "GET":
-                if(!form.protect_attachments) break
-            case "DELETE":
-                const otp = generateOTP()
-                await valkey.set(`otp:${sessionId}`, otp)
-                await valkey.expire(`otp:${sessionId}`, 600) // 10 minutes
-                const stream_id = await valkey.xadd('messages', '*', 'hex', 'otp', 'form_id', download.form_id, 'fields', JSON.stringify({ code: otp }), 'attachment_count', 0)
-                if(!stream_id) {
-                    console.warn('Could not add otp notification to queue')
-                    return new Response(eta.render('error', {
-                        pageTitle: 'Error',
-                        errorNumber: 500,
-                        errorMessage: 'Could not send OTP'
-                    }), {
-                        headers: { "Content-Type": "text/html" },
-                        status: 500
-                    })
-                }
-                return new Response(eta.render('otp', {
-                    pageTitle: 'Authorization Required',
-                    action: req.method,
-                }), {
-                    headers: { "Content-Type": "text/html" }
-                })
-            case "POST":
-                if(getRequestType(req) !== 'form') {
-                    return sendError('form', 405, 'Mime not supported')
-                }
-                const formData = await req.formData()
-                const userOtp = formData.get('otp')?.toString()
-                const savedOtp = await valkey.get(`otp:${sessionId}`)
-                const action = formData.get('action')?.toString()
-                if(userOtp !== savedOtp) {
+        if(form.protect_attachments) {
+            switch(req.method) {
+                case "GET":
+                    const otpExists = await valkey.exists(`otp:${sessionId}`)
+                    const now = Date.now()
+                    let otpTtl = 600
+                    let otpExpiry = now + otpTtl * 1000
+                    if(otpExists) {
+                        otpExpiry = await valkey.expiretime(`otp:${sessionId}`)
+                    } else {
+                        const otp = generateOTP()
+                        await valkey.set(`otp:${sessionId}`, otp)
+                        await valkey.expire(`otp:${sessionId}`, otpTtl) // 10 minutes
+                        const stream_id = await valkey.xadd('messages', '*', 'hex', 'otp', 'form_id', download.form_id, 'fields', JSON.stringify([{ key: 'otp', value: otp }]), 'attachment_count', 0)
+                        if(!stream_id) {
+                            console.warn('Could not add otp notification to queue')
+                            return new Response(eta.render('error', {
+                                pageTitle: 'Error',
+                                errorNumber: 500,
+                                errorMessage: 'Could not send OTP'
+                            }), {
+                                headers: { "Content-Type": "text/html" },
+                                status: 500
+                            })
+                        }
+                    }
                     return new Response(eta.render('otp', {
-                        pageTitle: 'Error',
-                        error: 'Wrong OTP. Try again.',
-                        action,
-                    }), {
-                        headers: { "Content-Type": "text/html" },
-                        status: 403
-                    })
-                }
-                await valkey.del(`otp:${sessionId}`)
-                if(action === "DELETE") {
-                    const files:MessageAttachment[] = JSON.parse(download.files) || []
-                    if(files.length) await minio.removeObjects('attachments', files.map(a => a.key))
-                    await valkey.hdel(`attachments:${hex}`)
-                    return new Response(eta.render('deleted', {
-                        pageTitle: 'Files Deleted Successfully',
+                        pageTitle: 'Authorization Required',
+                        error: false,
+                        otpExpiry,
+                        action: req.method,
                     }), {
                         headers: { "Content-Type": "text/html" }
                     })
-                }
+                case "POST":
+                    if(getRequestType(req) !== 'form') {
+                        return sendError('form', 405, 'Mime not supported')
+                    }
+                    const formData = await req.formData()
+                    const userOtp = formData.get('otp')?.toString()
+                    const savedOtp = await valkey.get(`otp:${sessionId}`)
+                    const action = formData.get('action')?.toString()
+                    if(userOtp !== savedOtp) {
+                        const otpExpiry = await valkey.expiretime(`otp:${sessionId}`)
+                        return new Response(eta.render('otp', {
+                            pageTitle: 'Error',
+                            error: true,
+                            otpExpiry,
+                            action,
+                        }), {
+                            headers: { "Content-Type": "text/html" },
+                            status: 403
+                        })
+                    }
+                    await valkey.del(`otp:${sessionId}`)
+            }
         }
 
         const fileData = JSON.parse(download.files)
@@ -263,8 +264,10 @@ serve({
         return new Response(await eta.renderAsync('download', {
             pageTitle: 'Download',
             downloadUrl: `${Bun.env.API_URL}download/${hex}`,
+            deleteUrl: `${Bun.env.API_URL}attachments/${hex}/delete`,
             limit: form.retention_limit > 0 && form.retention_type === 'downloads' ? form.retention_limit - parseInt(download.count) : null,
             expiry,
+            canDelete: form.recipient_can_delete_attachments,
             files: await Promise.all(fileData.map(async (f:MessageAttachment) => {
                 return {
                     name: f.filename,
@@ -274,6 +277,128 @@ serve({
         }), {
             headers: { "Content-Type": "text/html" }
         })
+    },
+    '/attachments/:hex/delete': async (req:BunRequest) => {
+        if(getRequestType(req) !== 'form' && req.method !== "POST") {
+            return sendError('form', 405, 'HTTP method not supported')
+        }
+        if(Bun.env.DEBUG == "true") console.debug('Deleting Attachments init', req)
+        // @ts-expect-error
+        const hex: string = req.params.hex
+        if(!hex || !hex.length) {
+            return new Response(eta.render('error', {
+                pageTitle: 'Error',
+                errorNumber: 401,
+                errorMessage: 'Resource id missing'
+            }), {
+                headers: { "Content-Type": "text/html" },
+                status: 401
+            })
+        }
+        const exists = await valkey.exists(`attachments:${hex}`)
+        if(exists === 0) {
+            if(Bun.env.DEBUG == "true") console.warn('Download expired or missing', hex)
+            return new Response(eta.render('error', {
+                pageTitle: 'Error',
+                errorNumber: 404,
+                errorMessage: 'Download expired or missing'
+            }), {
+                headers: { "Content-Type": "text/html" },
+                status: 404
+            })
+        }
+        const download = await valkey.hgetall(`attachments:${hex}`)
+        const form = await db.collection('forms').getOne(download.form_id)
+        if(!form.recipient_can_delete_attachments) {
+            return new Response(eta.render('error', {
+                pageTitle: 'Error',
+                errorNumber: 403,
+                errorMessage: 'Recipients are not allowed to delete attachments'
+            }), {
+                headers: { "Content-Type": "text/html" },
+                status: 403
+            })
+        }
+        if(form.retention_limit > 0 && form.retention_type === 'downloads') {
+            if(download.count >= form.retention_limit) {
+                if(Bun.env.DEBUG == "true") console.debug('Download limit reached', download)
+                return new Response(eta.render('error', {
+                    pageTitle: 'Error',
+                    errorNumber: 403,
+                    errorMessage: 'Download limit reached'
+                }), {
+                    headers: { "Content-Type": "text/html" },
+                    status: 403
+                })
+            }
+        }
+        let sessionId = req.cookies.get("session")
+        if(!sessionId) {
+            sessionId = crypto.randomUUID()
+            req.cookies.set("session", sessionId, {
+                maxAge: 60 * 60 * 24, // 1 day
+                httpOnly: true,
+                secure: Bun.env.API_URL?.startsWith('https')
+            })
+        }
+        const formData = await req.formData()
+        const userOtp = formData.get('otp')?.toString()
+        if(userOtp) {
+            const savedOtp = await valkey.get(`otp:${sessionId}`)
+            if(userOtp !== savedOtp) {
+                const otpExpiry = await valkey.expiretime(`otp:${sessionId}`)
+                return new Response(eta.render('otp', {
+                    pageTitle: 'Error',
+                    error: true,
+                    otpExpiry,
+                    action: 'DELETE',
+                }), {
+                    headers: { "Content-Type": "text/html" },
+                    status: 403
+                })
+            }
+            await valkey.del(`otp:${sessionId}`)
+            const files:MessageAttachment[] = JSON.parse(download.files) || []
+            if(files.length) await minio.removeObjects('attachments', files.map(a => a.key))
+            await valkey.del(`attachments:${hex}`)
+            return new Response(eta.render('deleted', {
+                pageTitle: 'Files Deleted Successfully',
+            }), {
+                headers: { "Content-Type": "text/html" }
+            })
+        } else {
+            const otpExists = await valkey.exists(`otp:${sessionId}`)
+            const now = Date.now()
+            let otpTtl = 600
+            let otpExpiry = now + otpTtl * 1000
+            if(otpExists) {
+                otpExpiry = await valkey.expiretime(`otp:${sessionId}`)
+            } else {
+                const otp = generateOTP()
+                await valkey.set(`otp:${sessionId}`, otp)
+                await valkey.expire(`otp:${sessionId}`, otpTtl) // 10 minutes
+                const stream_id = await valkey.xadd('messages', '*', 'hex', 'otp', 'form_id', download.form_id, 'fields', JSON.stringify([{ key: 'otp', value: otp }]), 'attachment_count', 0)
+                if(!stream_id) {
+                    console.warn('Could not add otp notification to queue')
+                    return new Response(eta.render('error', {
+                        pageTitle: 'Error',
+                        errorNumber: 500,
+                        errorMessage: 'Could not send OTP'
+                    }), {
+                        headers: { "Content-Type": "text/html" },
+                        status: 500
+                    })
+                }
+            }
+            return new Response(eta.render('otp', {
+                pageTitle: 'Authorization Required',
+                error: false,
+                otpExpiry,
+                action: req.method,
+            }), {
+                headers: { "Content-Type": "text/html" }
+            })
+        }
     },
     '/download/:hex': async (req:BunRequest) => {
         if(req.method !== "GET" || getRequestType(req) !== 'json') { // this only works via the download page
@@ -342,7 +467,7 @@ serve({
                         for (const file of fileData) {
                            await minio.removeObject('attachments', file.key)
                         }
-                        await valkey.hdel(`attachments:${hex}`)
+                        await valkey.del(`attachments:${hex}`)
                     }
                 })
                 return new Response(fileStream as any, {
@@ -360,7 +485,7 @@ serve({
                 s3Object.on('close', async () => {
                     if(form.retention_limit !== 0 && form.retention_type === 'downloads' && downloadCount === form.retention_limit - 1) {
                         await minio.removeObject('attachments', fileData[0].key)
-                        await valkey.hdel(`attachments:${hex}`)
+                        await valkey.del(`attachments:${hex}`)
                     }
                 })
                 return new Response(s3Object as any, {
@@ -512,7 +637,7 @@ serve({
         // add to mail queue
         hasher.update(JSON.stringify({ form_id, fields, attachments })) // calc sha256 of data for in-queue message deduplication
         const hex = hasher.digest("hex")
-        const existing = await valkey.hget(hex, 'stream_id')
+        const existing = await valkey.get(`streams:${hex}`)
         if(existing && !form.allow_duplicates) {
             if(Bun.env.DEBUG == "true") console.debug('Duplicate request', hex)
             return sendError(type, 409, 'Duplicate request', redirectFailUrl)
@@ -523,9 +648,9 @@ serve({
                 return sendError(type, 500, 'Could not add message to queue', redirectFailUrl)
             }
             if(existing) {
-                await valkey.hset(hex, { stream_id: `${existing},${stream_id}` })
+                await valkey.set(`streams:${hex}`, `${existing},${stream_id}`)
             } else {
-                await valkey.hset(hex, { stream_id })
+                await valkey.set(`streams:${hex}`, stream_id)
                 if(attachments.length) {
                     await valkey.hsetnx(`attachments:${hex}`, 'count', 0)
                     await valkey.hset(`attachments:${hex}`, 'form_id', form_id, 'files', JSON.stringify(attachments))

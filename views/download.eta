@@ -28,7 +28,14 @@
         <%= it.limit %> more downloads available
         <% } %>
     </div>
-    <button onclick="download()">Download<%= it.files.length > 1 ? ' All' : '' %></a>
+    <div class="button-group">
+        <button onclick="download()">Download<%= it.files.length > 1 ? ' All' : '' %></button>
+        <% if (it.canDelete) { %>
+        <form method="POST" action="<%= it.deleteUrl %>">
+            <input type="submit" value="Delete" />
+        </form>
+        <% } %>
+    </div>
 </div>
 
 <script>
@@ -39,8 +46,9 @@ document.addEventListener('DOMContentLoaded', function () {
 }, false)
 <% } %>
 async function download() {
-    document.querySelector('button').setAttribute('disabled', 'disabled')
-    document.querySelector('button').setAttribute('done', '0')
+    document.querySelector('.wrapper input[type="submit"]').setAttribute('disabled', 'disabled')
+    document.querySelector('.wrapper button').setAttribute('disabled', 'disabled')
+    document.querySelector('.wrapper button').setAttribute('done', '0')
     try {
         const response = await fetch('<%= it.downloadUrl %>', {
             headers: {
@@ -92,5 +100,4 @@ async function download() {
         console.error('Download error:', error)
     }
 }
-
 </script>

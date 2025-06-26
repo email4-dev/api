@@ -57,7 +57,7 @@
             padding: 3rem var(--padding, 1rem); 
         }
 
-        .wrapper button {
+        .wrapper button, .wrapper input[type="submit"] {
             text-decoration: none;
             padding: 0.75rem 1.5rem;
             font-size: 1.1rem;
@@ -70,14 +70,18 @@
             transition: all 0.4s;
         }
 
-        .wrapper button:hover {
+        .wrapper input[type="submit"] {
+            background-color: #e91826;
+        }
+
+        .wrapper button:hover, .wrapper input[type="submit"]:hover {
             transform: translateY(-10px);
             box-shadow: 0 7px 0 -2px #f85959,
                         0 15px 0 -4px #39a2db,
                         0 16px 10px -3px rgba(57, 162, 219, 0.7);
         }
 
-        .wrapper button:active {
+        .wrapper button:active, .wrapper input[type="submit"]:active {
             transition: all 0.2s;
             transform: translateY(-5px);
             box-shadow: 0 2px 0 -2px #f85959,
@@ -85,7 +89,7 @@
                     0 12px 10px -3px rgba(57, 162, 219, 0.7);
         }
 
-        .wrapper button[disabled] {
+        .wrapper button[disabled], .wrapper input[type="submit"][disabled] {
             background: var(--gray-color);
             box-shadow: initial;
             position: relative;
@@ -234,6 +238,11 @@
         input::-webkit-inner-spin-button {
             -webkit-appearance: none;
             margin: 0;
+        }
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
         }
     </style>
 </head>
