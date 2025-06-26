@@ -134,11 +134,10 @@ serve({
             console.warn('Altcha error', form_id, error?.message)
             return sendError('json', error?.status, error.message)
         }
-        const now = new Date()
         const hmac = await challenge(valkey, handler_id)
         return Response.json(hmac, { headers: {
             ...cors,
-            Expires: new Date(now.getTime() + (parseInt(Bun.env.CAPTCHA_EXPIRE!) * 1000)).toUTCString()
+            Expires: new Date(Date.now() + (parseInt(Bun.env.CAPTCHA_EXPIRE!) || 60 * 1000)).toUTCString()
         }})
     },
     '/attachments/:hex': async (req:BunRequest) => {
