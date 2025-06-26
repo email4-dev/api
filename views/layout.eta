@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email4dev - <%= it.pageTitle %></title>
+    <link rel="icon" type="image/png" sizes="32x32" href="https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg">
+    <style>
+        :root {
+            --primary-color: #09ace9;
+            --background-color: #f3f3fc;
+            --secondary-color: #0d213d;
+            --accent-light: #ddd6fe;
+            --gradient-primary: linear-gradient(135deg, var(--primary-color), #38bdf8);
+            --gradient-background: linear-gradient(135deg, var(--background-color) 0%, #e6f7ff 100%);
+            --gray-color: #718096;
+            --light-gray: #e2e8f0;
+            --white: #ffffff;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .dark-mode {
+            --primary-color: #0dcaf0;
+            --background-color: #121826;
+            --secondary-color: #e0e5ed;
+            --accent-light: #4b3f8a;
+            --gradient-primary: linear-gradient(135deg, #0dcaf0, #60c6f8);
+            --gradient-background: linear-gradient(135deg, var(--background-color) 0%, #1a2438 100%);
+            --gray-color: #9ba8bc;
+            --light-gray: #2a3446;
+            --white: #1e2638;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.15);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.25), 0 2px 4px -1px rgba(0, 0, 0, 0.15);
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            color: var(--color);
+            line-height: 1.6;
+            font-size: 1rem;
+            background: var(--background-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 100vh; 
+            margin: 0; 
+            gap: 2rem; 
+            text-align:center;
+        }
+
+        .section-container {
+            max-width: var(--max-width, 1200px);
+            margin: 0 auto;
+            padding: 3rem var(--padding, 1rem); 
+        }
+
+        .wrapper button, .wrapper input[type="submit"] {
+            text-decoration: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            background-color: var(--primary-color);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            transition: all 0.4s;
+        }
+
+        .wrapper input[type="submit"] {
+            background-color: #e91826;
+        }
+
+        .wrapper button:hover, .wrapper input[type="submit"]:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 7px 0 -2px #f85959,
+                        0 15px 0 -4px #39a2db,
+                        0 16px 10px -3px rgba(57, 162, 219, 0.7);
+        }
+
+        .wrapper button:active, .wrapper input[type="submit"]:active {
+            transition: all 0.2s;
+            transform: translateY(-5px);
+            box-shadow: 0 2px 0 -2px #f85959,
+                    0 8px 0 -4px #39a2db,
+                    0 12px 10px -3px rgba(57, 162, 219, 0.7);
+        }
+
+        .wrapper button[disabled], .wrapper input[type="submit"][disabled] {
+            background: var(--gray-color);
+            box-shadow: initial;
+            position: relative;
+        }
+
+        .wrapper button[disabled]::before {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: attr(data-done);
+            background-color: var(--primary-color);
+        }
+
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        h1 {
+            color: var(--secondary-color);
+            font-size: 2rem;
+            font-weight: 500;
+        }
+
+        .attachments{
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+            flex-direction: column;
+        }
+
+        .attachment-item {
+            background: var(--white);
+            border: 1px solid var(--light-gray);
+            border-radius: var(--border-radius);
+            padding: 16px 24px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+
+        .attachment-item:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+
+        .attachment-item p {
+            margin: 0;
+            color: var(--secondary-color);
+            font-weight: 500;
+        }
+        .footer {
+            background: var(--background-color);
+            color: var(--secondary-color);
+            width: 100%;
+            padding: 2rem 0;
+            text-align: center;
+            margin-top: auto;
+        }
+        .downloads-section {
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+        .downloads-table {
+            background-color: var(--white);
+            color: var(--secondary-color);
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        .downloads-table th {
+            background: var(--primary-color);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        .downloads-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--secondary-color);
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .downloads-table td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--light-gray);
+            vertical-align: middle;
+        }
+        .footer a {
+            color: var(--primary-color);
+            text-decoration: none;
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+        }
+        .logo{
+            padding-top:4rem;
+        }
+        .darkmode{
+            width:3rem;
+            height:3rem;
+            border-radius: 100%;
+            border: none;
+            background-color: #333;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: background-color 0.3s ease;
+            position: fixed;
+            bottom: 2.5rem;
+            right: 2.5rem;
+            z-index: 1000;
+        }
+        .alert {
+            background-color: #fff3cd;
+            color: #856404;
+            border-left-color: #ffc107;
+            padding:0.5rem;
+            border-radius: var(--border-radius);
+        }
+        .wrapper{
+            display:grid;
+            gap:2rem;
+        }
+        .otp-text{
+            color: var(--secondary-color);
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+            width: 40px;
+            height: 50px;
+            text-align: center;
+            font-size: 18px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="logo">
+        <img alt ="email4dev" id="logo" src="https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg"/>
+    </div>
+    <button id="toggle-dark-mode" class="darkmode">
+      <svg id="theme-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+        <path id="moon-icon" d="M21.752 15.002A9 9 0 1112 3a7.5 7.5 0 009.752 12.002z" />
+      </svg>
+  
+  </button>
+    <%~ it.body %>
+
+    <div class="footer">
+        <p>Powered by <a href="https://email4.dev" target="_new">Email4.dev</a></p>
+    </div>
+<script>
+const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+let darkMode = prefersDark;
+
+const lightLogo = "https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/1737541073000logo-final.svg";
+const darkLogo = "https://cdn1.dws.gr/storage/v1/object/public/images/58836e37-9509-4929-805d-c601b7cc1d58/17477313198241737541073000logo-final.svg";
+
+function updateThemeAssets(mode) {
+    // Update icon
+    const themeIcon = document.getElementById("theme-icon");
+    const isDark = mode === "dark";
+
+    themeIcon.innerHTML = isDark
+        ? '<path d="M21.752 15.002A9 9 0 1112 3a7.5 7.5 0 009.752 12.002z" />'
+        : '<path d="m12.6984 19.8828c.1568-.015.3137.0387.4297.1482.1139.1074.1783.26.1719.4189v3.3c.0021.1977-.101.3824-.2729.4834-.1719.0988-.3824.0988-.5543 0-.1719-.101-.275-.2857-.2729-.4834v-3.3c-.0064-.2621.174-.492.4297-.55.0215-.0064.0451-.0129.0688-.0172zm5.3797-2.2516c.0172 0 .0344 0 .0516 0s.0344 0 .0516 0c.1504.0021.2922.0623.3953.1719l2.3375 2.3375c.1633.1332.2385.3459.1912.5521-.0473.2041-.2084.3652-.4125.4125-.2063.0473-.4189-.0279-.5521-.1912l-2.3375-2.3375c-.1525-.1418-.2127-.3566-.1547-.5586.058-.1998.2234-.3502.4297-.3867zm-10.8281 0c.0172 0 .0344 0 .0516 0 .2256-.0043.434.1289.5199.3373.0881.2084.0387.4512-.1246.608l-2.3375 2.3375c-.1332.1633-.3459.2385-.5521.1912-.2041-.0473-.3652-.2084-.4125-.4125-.0473-.2063.0279-.4189.1912-.5521l2.3375-2.3375c.0859-.0924.202-.1547.3266-.1719zm13.0453-5.4313c.0172 0 .0344 0 .0516 0s.0344 0 .0516 0 .0344 0 .0516 0h3.3c.1977-.0021.3824.101.4834.2729.0988.1719.0988.3824 0 .5543-.101.1719-.2857.275-.4834.2729h-3.3c-.3029.043-.5844-.1697-.6273-.4727s.1697-.5844.4727-.6273zm-18.7 0c.0172 0 .0344 0 .0516 0s.0344 0 .0516 0 .0344 0 .0516 0h3.3c.1977-.0021.3824.101.4834.2729.0988.1719.0988.3824 0 .5543-.101.1719-.2857.275-.4834.2729h-3.3c-.3029.043-.5844-.1697-.6273-.4727s.1697-.5844.4727-.6273zm11.1203-3.85c-2.4148.0193-4.3656 1.9809-4.3656 4.4 0 2.432 1.9701 4.4 4.4 4.4 2.432 0 4.4-1.968 4.4-4.4 0-2.4127-1.9422-4.3721-4.3484-4.4-.0172 0-.0344 0-.0516 0-.0107 0-.0236 0-.0344 0zm-.0172-1.1c.0172 0 .0344 0 .0516 0 .0107 0 .0236 0 .0344 0 .058.0021.116.0129.1719.0344.0193 0 .0322.0172.0516.0172 2.9025.1439 5.2422 2.5115 5.2422 5.4484 0 3.0271-2.4729 5.5-5.5 5.5s-5.5-2.4729-5.5-5.5c0-2.9477 2.359-5.3238 5.2766-5.4484.0064-.0064.0107-.0107.0172-.0172.0344-.0086.0688-.015.1031-.0172.0172-.0064.0344-.0129.0516-.0172zm7.7688-2.8359c.2363-.0301.4641.0945.5672.3115.101.2148.0516.4705-.1203.6338l-2.3375 2.3375c-.1332.1633-.3459.2385-.5521.1912-.2041-.0473-.3652-.2084-.4125-.4125-.0473-.2063.0279-.4189.1912-.5521l2.3375-2.3375c.0859-.0924.202-.1547.3266-.1719zm-15.6063 0c.0172 0 .0344 0 .0516 0 .1676-.0129.333.0494.4469.1719l2.3375 2.3375c.1633.1332.2385.3459.1912.5521-.0473.2041-.2084.3652-.4125.4125-.2063.0473-.4189-.0279-.5521-.1912l-2.3375-2.3375c-.1525-.1418-.2127-.3566-.1547-.5586.058-.1998.2234-.3502.4297-.3867zm7.8375-3.2313c.1568-.015.3137.0387.4297.1482.1139.1074.1783.26.1719.4189v3.3c.0021.1977-.101.3824-.2729.4834-.1719.0988-.3824.0988-.5543 0-.1719-.101-.275-.2857-.2729-.4834v-3.3c-.0064-.2621.174-.492.4297-.55.0215-.0064.0451-.0129.0688-.0172z" />';
+
+    const logo = document.getElementById("logo");
+    if (logo) {
+        logo.src = isDark ? darkLogo : lightLogo;
+    }
+}
+
+function toggleDarkMode() {
+    darkMode = !darkMode;
+    const mode = darkMode ? "dark" : "light";
+    document.body.classList.toggle("dark-mode", darkMode);
+    localStorage.setItem("theme", mode);
+    updateThemeAssets(mode);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    const savedTheme = localStorage.getItem("theme");
+    const mode = savedTheme || (prefersDark ? "dark" : "light");
+
+    darkMode = mode === "dark";
+    if (darkMode) {
+        document.body.classList.add("dark-mode");
+    }
+    updateThemeAssets(mode);
+    document.getElementById("toggle-dark-mode").addEventListener("click", toggleDarkMode);
+});
+</script>
+</body>
+</html>

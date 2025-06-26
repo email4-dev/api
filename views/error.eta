@@ -1,0 +1,10 @@
+<% layout("layout") %>
+
+<div id="error-page">
+    <div class="section-container">
+        <div class="wrapper">
+            <h1>Error <%= it.errorNumber %></h1>
+            <div class="alert"><%= it.errorMessage %></div>
+        </div>
+    </div>
+</div>

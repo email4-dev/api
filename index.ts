@@ -1,13 +1,17 @@
-import { alcthaInit, challenge, verify } from './captcha'
+import { challenge, verify } from './captcha'
 import { getDomain } from 'tldjs'
-import { connect, headers } from "@nats-io/transport-node"
-import { jetstreamManager, RetentionPolicy, StorageType } from "@nats-io/jetstream"
-import { Objm } from "@nats-io/obj"
 import crypto from 'crypto'
 import PocketBase from 'pocketbase'
-import { Kvm } from '@nats-io/kv'
+import Valkey from 'iovalkey'
+import * as Minio from 'minio'
 import { verifyDomain } from './dns'
-import { serve } from 'bun'
+import { serve, type BunRequest } from 'bun'
+import { Eta } from "eta"
+import { join } from "path"
+import { createReadStream, createWriteStream, unlinkSync } from 'fs'
+import Archiver from 'archiver'
+import { tmpdir } from 'os'
+import { stat } from 'fs/promises'
 
 const db = new PocketBase(Bun.env.POCKETBASE_URL)
 
@@ -17,6 +21,10 @@ const file = Bun.file('package.json')
 const content = await file.text()
 const match = content.match(/"version"\s*:\s*"([^"]+)"/)
 const version = match ? match[1] : '0.0.0'
+const eta = new Eta({
+  views: join(import.meta.dir, "views"),
+  cache: Bun.env.NODE_ENV === "production"
+})
 
 console.log(`Email4.dev API v${version} starting...`)
 
@@ -26,49 +34,39 @@ await db.collection('_superusers').authWithPassword(
 )
 
 if(!db.authStore.isValid) {
-    console.error('Pocketbase authentication failed!')
-    process.exit(1)
+    throw 'Pocketbase authentication failed!'
 }
 
-const nc = await connect({ servers: Bun.env.NATS_HOST })
-const js = await jetstreamManager(nc)
-const objm = new Objm(nc)
+const valkey = new Valkey(6379, 'valkey')
 const hasher = new Bun.CryptoHasher("sha256")
-const bucket = await objm.create("attachments", { storage: StorageType.File })
+const minio = new Minio.Client({
+    endPoint: 'minio',
+    port: 9000,
+    accessKey: Bun.env.MINIO_ROOT_USER!,
+    secretKey: Bun.env.MINIO_ROOT_PASSWORD!,
+    useSSL: false,
+    pathStyle: true
+})
 
-nc.closed().then((err) => {
+const bucketExists = await minio.bucketExists('attachments')
+if (!bucketExists) {
+  await minio.makeBucket('attachments', 'us-east-1')
+  console.log('MinIO bucket `attachments` created in "us-east-1".')
+}
+
+valkey.on("error", (err) => {
     if(err) {
-        console.error('NATS disconnected', err.message)
+        throw err
     } else {
-        console.error('NATS disconnected')
+        throw 'Valkey disconnected'
     }
-    process.exit(1)
 })
 
 process.on("beforeExit", async () => {
     console.log('Email4.dev API exiting gracefully...')
-    await nc.close()
     db.authStore.clear()
+    await valkey.quit()
 })
-
-try {
-    const streamInfo = await js.streams.info("messages")
-} catch (err: any) {
-    console.warn('Messages stream not found, creating it...')
-    await js.streams.add({
-        name: "messages",
-        subjects: [`message.>`],
-        retention: RetentionPolicy.Workqueue
-    })
-}
-
-try {
-    const kvm = new Kvm(js.jetstream())
-    await alcthaInit(kvm)
-} catch (e: unknown) {
-    console.error('Cannot initiate NATS K/V store connection.', (e as Error).message)
-    process.exit(1)
-}
 
 const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -96,181 +94,608 @@ const sendError = (type: string, status: number, message: string, redirect: stri
     }
 }
 
+const getRequestType = (req:BunRequest|Request): null | 'json' | 'form' => {
+    const contentType = req.headers.get('content-type')
+    if(contentType === 'application/json') return 'json'
+    if(contentType === 'application/x-www-form-urlencoded') return 'form'
+    if(contentType?.startsWith('multipart/form-data')) return 'form'
+    return null
+}
+
+const generateOTP = () => {
+  const array = new Uint32Array(1)
+  crypto.getRandomValues(array)
+  return (array[0] % 900000 + 100000).toString()
+}
+
+const byteValueNumberFormatter = Intl.NumberFormat("en", {
+  notation: "compact",
+  style: "unit",
+  unit: "byte",
+  unitDisplay: "narrow",
+})
+
 serve({
   port: 3000,
+  routes : {
+    '/altcha/:form_id': async (req:BunRequest) => {
+        if(req.method !== "GET") {
+            return sendError('form', 405, 'HTTP method not supported')
+        }
+        if(Bun.env.DEBUG == "true") console.debug('Altcha init', req)
+        // @ts-expect-error
+        const form_id: string = req.params.form_id
+        if(!form_id || !form_id.length) {
+            return sendError('form', 401, 'Bad Request')
+        }
+        const origin = req.headers.get('origin') || ''
+        let { handler_id, error } = await validateForm(form_id, origin)
+        if(error) {
+            console.warn('Altcha error', form_id, error?.message)
+            return sendError('json', error?.status, error.message)
+        }
+        const now = new Date()
+        const hmac = await challenge(valkey, handler_id)
+        return Response.json(hmac, { headers: {
+            ...cors,
+            Expires: new Date(now.getTime() + (parseInt(Bun.env.CAPTCHA_EXPIRE!) * 1000)).toUTCString()
+        }})
+    },
+    '/attachments/:hex': async (req:BunRequest) => {
+        if(!["GET", "POST"].includes(req.method)) {
+            return sendError('form', 405, 'Request method not supported')
+        }
+        if(Bun.env.DEBUG == "true") console.debug('Attachments init', req)
+        // @ts-expect-error
+        const hex: string = req.params.hex
+        if(!hex || !hex.length) {
+            return new Response(eta.render('error', {
+                pageTitle: 'Error',
+                errorNumber: 401,
+                errorMessage: 'Resource id missing'
+            }), {
+                headers: { "Content-Type": "text/html" },
+                status: 401
+            })
+        }
+        const exists = await valkey.exists(`attachments:${hex}`)
+        if(exists === 0) {
+            if(Bun.env.DEBUG == "true") console.warn('Download expired or missing', hex)
+            return new Response(eta.render('error', {
+                pageTitle: 'Error',
+                errorNumber: 404,
+                errorMessage: 'Download expired or missing'
+            }), {
+                headers: { "Content-Type": "text/html" },
+                status: 404
+            })
+        }
+        const download = await valkey.hgetall(`attachments:${hex}`)
+        const form = await db.collection('forms').getOne(download.form_id)
+        if(form.retention_limit > 0 && form.retention_type === 'downloads') {
+            if(download.count >= form.retention_limit) {
+                if(Bun.env.DEBUG == "true") console.debug('Download limit reached', download)
+                return new Response(eta.render('error', {
+                    pageTitle: 'Error',
+                    errorNumber: 403,
+                    errorMessage: 'Download limit reached'
+                }), {
+                    headers: { "Content-Type": "text/html" },
+                    status: 403
+                })
+            }
+        }
+        let sessionId = req.cookies.get("session")
+        if(!sessionId) {
+            sessionId = crypto.randomUUID()
+            req.cookies.set("session", sessionId, {
+                maxAge: 60 * 60 * 24, // 1 day
+                httpOnly: true,
+                secure: Bun.env.API_URL?.startsWith('https')
+            })
+        }
+        if(form.protect_attachments) {
+            switch(req.method) {
+                case "GET":
+                    const otpExists = await valkey.exists(`otp:${sessionId}`)
+                    const now = Date.now()
+                    let otpTtl = 600
+                    let otpExpiry = now + otpTtl * 1000
+                    if(otpExists) {
+                        otpExpiry = await valkey.expiretime(`otp:${sessionId}`)
+                    } else {
+                        const otp = generateOTP()
+                        await valkey.set(`otp:${sessionId}`, otp)
+                        await valkey.expire(`otp:${sessionId}`, otpTtl) // 10 minutes
+                        const stream_id = await valkey.xadd('messages', '*', 'hex', 'otp', 'form_id', download.form_id, 'fields', JSON.stringify([{ key: 'otp', value: otp }]), 'attachment_count', 0)
+                        if(!stream_id) {
+                            console.warn('Could not add otp notification to queue')
+                            return new Response(eta.render('error', {
+                                pageTitle: 'Error',
+                                errorNumber: 500,
+                                errorMessage: 'Could not send OTP'
+                            }), {
+                                headers: { "Content-Type": "text/html" },
+                                status: 500
+                            })
+                        }
+                    }
+                    return new Response(eta.render('otp', {
+                        pageTitle: 'Authorization Required',
+                        error: false,
+                        otpExpiry,
+                        action: req.method,
+                    }), {
+                        headers: { "Content-Type": "text/html" }
+                    })
+                case "POST":
+                    if(getRequestType(req) !== 'form') {
+                        return sendError('form', 405, 'Mime not supported')
+                    }
+                    const formData = await req.formData()
+                    const userOtp = formData.get('otp')?.toString()
+                    const savedOtp = await valkey.get(`otp:${sessionId}`)
+                    const action = formData.get('action')?.toString()
+                    if(userOtp !== savedOtp) {
+                        const otpExpiry = await valkey.expiretime(`otp:${sessionId}`)
+                        return new Response(eta.render('otp', {
+                            pageTitle: 'Error',
+                            error: true,
+                            otpExpiry,
+                            action,
+                        }), {
+                            headers: { "Content-Type": "text/html" },
+                            status: 403
+                        })
+                    }
+                    await valkey.del(`otp:${sessionId}`)
+            }
+        }
+
+        const fileData = JSON.parse(download.files)
+
+        const ttl = await valkey.ttl(`attachments:${hex}`)
+        let expiry = null
+        if(ttl > 0) {
+            const now = Date.now()
+            expiry = now + ttl * 1000
+        }
+
+        return new Response(await eta.renderAsync('download', {
+            pageTitle: 'Download',
+            downloadUrl: `${Bun.env.API_URL}download/${hex}`,
+            deleteUrl: `${Bun.env.API_URL}attachments/${hex}/delete`,
+            limit: form.retention_limit > 0 && form.retention_type === 'downloads' ? form.retention_limit - parseInt(download.count) : null,
+            expiry,
+            canDelete: form.recipient_can_delete_attachments,
+            files: await Promise.all(fileData.map(async (f:MessageAttachment) => {
+                return {
+                    name: f.filename,
+                    size: byteValueNumberFormatter.format((await minio.statObject('attachments', f.key)).size)
+                }
+            })),
+        }), {
+            headers: { "Content-Type": "text/html" }
+        })
+    },
+    '/attachments/:hex/delete': async (req:BunRequest) => {
+        if(getRequestType(req) !== 'form' && req.method !== "POST") {
+            return sendError('form', 405, 'HTTP method not supported')
+        }
+        if(Bun.env.DEBUG == "true") console.debug('Deleting Attachments init', req)
+        // @ts-expect-error
+        const hex: string = req.params.hex
+        if(!hex || !hex.length) {
+            return new Response(eta.render('error', {
+                pageTitle: 'Error',
+                errorNumber: 401,
+                errorMessage: 'Resource id missing'
+            }), {
+                headers: { "Content-Type": "text/html" },
+                status: 401
+            })
+        }
+        const exists = await valkey.exists(`attachments:${hex}`)
+        if(exists === 0) {
+            if(Bun.env.DEBUG == "true") console.warn('Download expired or missing', hex)
+            return new Response(eta.render('error', {
+                pageTitle: 'Error',
+                errorNumber: 404,
+                errorMessage: 'Download expired or missing'
+            }), {
+                headers: { "Content-Type": "text/html" },
+                status: 404
+            })
+        }
+        const download = await valkey.hgetall(`attachments:${hex}`)
+        const form = await db.collection('forms').getOne(download.form_id)
+        if(!form.recipient_can_delete_attachments) {
+            return new Response(eta.render('error', {
+                pageTitle: 'Error',
+                errorNumber: 403,
+                errorMessage: 'Recipients are not allowed to delete attachments'
+            }), {
+                headers: { "Content-Type": "text/html" },
+                status: 403
+            })
+        }
+        if(form.retention_limit > 0 && form.retention_type === 'downloads') {
+            if(download.count >= form.retention_limit) {
+                if(Bun.env.DEBUG == "true") console.debug('Download limit reached', download)
+                return new Response(eta.render('error', {
+                    pageTitle: 'Error',
+                    errorNumber: 403,
+                    errorMessage: 'Download limit reached'
+                }), {
+                    headers: { "Content-Type": "text/html" },
+                    status: 403
+                })
+            }
+        }
+        let sessionId = req.cookies.get("session")
+        if(!sessionId) {
+            sessionId = crypto.randomUUID()
+            req.cookies.set("session", sessionId, {
+                maxAge: 60 * 60 * 24, // 1 day
+                httpOnly: true,
+                secure: Bun.env.API_URL?.startsWith('https')
+            })
+        }
+        const formData = await req.formData()
+        const userOtp = formData.get('otp')?.toString()
+        if(userOtp) {
+            const savedOtp = await valkey.get(`otp:${sessionId}`)
+            if(userOtp !== savedOtp) {
+                const otpExpiry = await valkey.expiretime(`otp:${sessionId}`)
+                return new Response(eta.render('otp', {
+                    pageTitle: 'Error',
+                    error: true,
+                    otpExpiry,
+                    action: 'DELETE',
+                }), {
+                    headers: { "Content-Type": "text/html" },
+                    status: 403
+                })
+            }
+            await valkey.del(`otp:${sessionId}`)
+            const files:MessageAttachment[] = JSON.parse(download.files) || []
+            if(files.length) await minio.removeObjects('attachments', files.map(a => a.key))
+            await valkey.del(`attachments:${hex}`)
+            return new Response(eta.render('deleted', {
+                pageTitle: 'Files Deleted Successfully',
+            }), {
+                headers: { "Content-Type": "text/html" }
+            })
+        } else {
+            const otpExists = await valkey.exists(`otp:${sessionId}`)
+            const now = Date.now()
+            let otpTtl = 600
+            let otpExpiry = now + otpTtl * 1000
+            if(otpExists) {
+                otpExpiry = await valkey.expiretime(`otp:${sessionId}`)
+            } else {
+                const otp = generateOTP()
+                await valkey.set(`otp:${sessionId}`, otp)
+                await valkey.expire(`otp:${sessionId}`, otpTtl) // 10 minutes
+                const stream_id = await valkey.xadd('messages', '*', 'hex', 'otp', 'form_id', download.form_id, 'fields', JSON.stringify([{ key: 'otp', value: otp }]), 'attachment_count', 0)
+                if(!stream_id) {
+                    console.warn('Could not add otp notification to queue')
+                    return new Response(eta.render('error', {
+                        pageTitle: 'Error',
+                        errorNumber: 500,
+                        errorMessage: 'Could not send OTP'
+                    }), {
+                        headers: { "Content-Type": "text/html" },
+                        status: 500
+                    })
+                }
+            }
+            return new Response(eta.render('otp', {
+                pageTitle: 'Authorization Required',
+                error: false,
+                otpExpiry,
+                action: req.method,
+            }), {
+                headers: { "Content-Type": "text/html" }
+            })
+        }
+    },
+    '/download/:hex': async (req:BunRequest) => {
+        if(req.method !== "GET" || getRequestType(req) !== 'json') { // this only works via the download page
+            return sendError('form', 405, 'HTTP method not supported')
+        }
+        if(Bun.env.DEBUG == "true") console.debug('Download init', req)
+        // @ts-expect-error
+        const hex: string = req.params.hex
+        if(!hex || !hex.length) {
+            return sendError('json', 401, 'Resource id missing')
+        }
+        const sessionId = req.cookies.get("session")
+        if(!sessionId) {
+            return sendError('json', 403, 'Cookie missing')
+        }
+        const exists = await valkey.exists(`attachments:${hex}`)
+        if(exists === 0) {
+            if(Bun.env.DEBUG == "true") console.warn('Download expired or missing', hex)
+            return sendError('json', 404, 'Download expired or missing')
+        }
+        const download = await valkey.hgetall(`attachments:${hex}`)
+        const downloadCount = parseInt(download.count)
+        const form = await db.collection('forms').getOne(download.form_id)
+        const isRedownload = await valkey.exists(`down:${hex}:${sessionId}`)
+        if(!isRedownload) {
+            await valkey.hincrby(`attachments:${hex}`, 'count', 1)
+            await valkey.setex(`down:${hex}:${sessionId}`, 60 * 60 * 24, 1) // 24 hours
+        }
+        try {
+            const fileData:MessageAttachment[] = JSON.parse(download.files)
+            if(fileData.length === 0) {
+                if(Bun.env.DEBUG == "true") console.warn('File list empty', download)
+                return sendError('json', 404, 'File list empty')
+            }
+            const timestamp = Date.now()
+            if(fileData.length > 1) {
+                const zipPath = join(tmpdir(), `attachments-${timestamp}.zip`)
+                const output = createWriteStream(zipPath)
+                const archive = Archiver('zip', { zlib: { level: 5 } })
+
+                await new Promise(async (resolve, reject) => {
+                    archive.pipe(output)
+                    
+                    // Handle archive errors
+                    archive.on('error', err => reject(err))
+                    output.on('error', err => reject(err))
+                    output.on('close', () => resolve(true))
+
+                    try {
+                        for (const file of fileData) {
+                            const fileStream = await minio.getObject('attachments', file.key)
+                            archive.append(fileStream, { name: file.filename })
+                        }
+                        await archive.finalize()
+                    } catch (err) {
+                        reject(err)
+                    }
+                })
+
+                const fileStream = createReadStream(zipPath)
+                const stats = await stat(zipPath)
+                // Clean up
+                fileStream.on('end', async () => {
+                    unlinkSync(zipPath)
+                    if(form.retention_limit !== 0 && form.retention_type === 'downloads' && downloadCount === form.retention_limit - 1) {
+                        for (const file of fileData) {
+                           await minio.removeObject('attachments', file.key)
+                        }
+                        await valkey.del(`attachments:${hex}`)
+                    }
+                })
+                return new Response(fileStream as any, {
+                    headers: {
+                        ...cors,
+                        'Content-Type': 'application/zip',
+                        'Content-Disposition': `attachment; filename="attachments-${timestamp}.zip"`,
+                        'Content-Length': `${stats.size}` || '',
+                    },
+                })
+            } else {
+                const s3ObjectStats = await minio.statObject('attachments', fileData[0].key)
+                const s3Object = await minio.getObject('attachments', fileData[0].key)
+                // Clean up
+                s3Object.on('close', async () => {
+                    if(form.retention_limit !== 0 && form.retention_type === 'downloads' && downloadCount === form.retention_limit - 1) {
+                        await minio.removeObject('attachments', fileData[0].key)
+                        await valkey.del(`attachments:${hex}`)
+                    }
+                })
+                return new Response(s3Object as any, {
+                    headers: {
+                        ...cors,
+                        'Content-Type': s3ObjectStats.metaData['Content-Type'] || 'application/octet-stream',
+                        'Content-Disposition': `attachment; filename="${fileData[0].filename}"`,
+                        'Content-Length': `${s3ObjectStats.size}` || '',
+                    },
+                })
+            }
+        } catch(error) {
+            console.warn('File list corrupted', download)
+            return sendError('json', 500, 'File list corrupted')
+        }
+    },
+    '/submit/:form_id': async (req:BunRequest) => {
+        const type = getRequestType(req)
+        if(req.method !== "POST" || type === null) { // this only works via the download page
+            return sendError('form', 405, 'HTTP method not supported')
+        }
+        // @ts-expect-error
+        const form_id: string = req.params.form_id
+        if(!form_id || !form_id.length) {
+            return sendError(type, 401, 'Bad Request')
+        }
+        if(Bun.env.DEBUG == "true") console.debug('Form submission', req)
+        const formData = type === 'form' ? await req.formData() : await req.json()
+        const origin = req.headers.get('origin') || ''
+        const { error } = await validateForm(form_id, origin)
+        if(error) {
+            console.warn('Submission error', form_id, error?.message)
+            return sendError('json', error?.status, error.message)
+        }
+        const form = await db.collection('forms').getOne(form_id, {
+            expand: 'handler,handler.domains',
+            fields: '*,expand.handler.*,expand.handler.domains.name,expand.handler.domains.verified'
+        }).then(data => data).catch(() => null)
+        if(!form) {
+            console.warn('Form not found:', form_id)
+            return sendError(type, 404, 'Form not found')
+        }
+        // check redirect targets
+        let redirectSuccessUrl = form.expand?.handler.redirect_success
+        let redirectFailUrl = form.expand?.handler.redirect_fail
+        if(!redirectSuccessUrl) {
+            const redirSuccess = type === 'form' ? formData.get('redir_success') : formData.redir_success || null
+            redirectSuccessUrl = redirSuccess ? redirSuccess : req.headers.get("referer")
+        }
+        if(!redirectFailUrl) {
+            const redirFail = type === 'form' ? formData.get('redir_fail') : formData.redir_fail || null
+            redirectFailUrl = redirFail ? redirFail : redirectSuccessUrl ? redirectSuccessUrl : req.headers.get("referer")
+        }
+        // @ts-expect-error
+        const redirectSuccess: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(redirectSuccessUrl) && d.verified.includes('ownership'))
+        // @ts-expect-error
+        const redirectFail: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(redirectFailUrl) && d.verified.includes('ownership'))
+        if(!redirectSuccess || !redirectFail) {
+            console.warn(`Domain doesn't match redirect configuration for form:`, form_id)
+            return sendError(type, 400, `Redirect doesn't match domain`, null)
+        }
+        // check altcha
+        if(form.expand?.handler.altcha) {
+            const altchaData = type === 'form' ? formData.get('altcha') : formData.altcha
+            if(!altchaData) {
+                console.warn('Altcha field missing in form:', form_id)
+                return sendError(type, 403, 'Altcha field missing', redirectFailUrl)
+            } else {
+                const payload = JSON.parse(atob(altchaData))
+                const altchaResult = await verify(valkey, payload, form.handler)
+                if(!altchaResult) {
+                    console.warn('Altcha mismatch for form:', form_id)
+                    return sendError(type, 403, 'Altcha mismatch', redirectFailUrl)
+                }
+            }
+        }
+        // check honeypot
+        if(form.expand?.handler.honeypot.length) {
+            const honeypotData = type === 'form' ? formData.get(form.expand?.handler.honeypot) : formData[form.expand?.handler.honeypot]
+            if(!honeypotData) {
+                console.warn('Honeypot enabled but not implemented', req)
+                return sendError(type, 400, 'Honeypot missing', redirectFailUrl)
+            } else {
+                if(honeypotData.length) {
+                    console.info('Bot detected!', req)
+                    return sendError(type, 403, 'Bot detected')
+                }
+            }
+        }
+        // init data variables
+        const fields:MessageField[] = []
+        const attachments:MessageAttachment[] = []
+        // skip system fields
+        const skipKeys = new Set(['altcha', 'redir_success', 'redir_fail'])
+        if(form.expand?.handler.honeypot.length) skipKeys.add(form.expand?.handler.honeypot)
+        // loop fields
+        if(type === 'form') {
+            for(const key of formData.keys()) {
+                if(skipKeys.has(key)) continue
+                skipKeys.add(key) // needed since we are looping on potentially "multiple" fields
+                const values: string[]|File[] = formData.getAll(key)
+                if(values[0] instanceof File) {
+                    for(let i=0;i<values.length;i++) {
+                        const file = values[i] as File
+                        // 20mb default limit
+                        if(file.size < (parseInt(Bun.env.ATTACHMENT_LIMIT || "20") * 1024 * 1024)) {
+                            const attachment_id = crypto.randomUUID()
+                            await minio.putObject('attachments', attachment_id, Buffer.from(await file.arrayBuffer()), file.size, {
+                                'Content-Type': file.type,
+                                'Attachment-Expiry': Date.now() + getAttachmentExpiry(form.retention_type, form.retention_limit) * 1000
+                            })
+                            attachments.push({ name: key, key: attachment_id, filename: file.name })
+                        } else {
+                            console.warn(`Attachment exceeds ${Bun.env.ATTACHMENT_LIMIT || 20}MB`, key)
+                        }
+                    }
+                } else {
+                    fields.push({ name: key, value: values.join(', ') })
+                }
+            }
+        } else {
+            for(const key of Object.keys(formData)) {
+                if(skipKeys.has(key)) continue
+                if(formData[key][0].constructor.name === "Object" && Object.hasOwn(formData[key][0], 'filename')) {
+                    for(let i=0;i<formData[key].length;i++) {
+                        const binary = atob(formData[key][i].filedata)
+                        const bytes = new Uint8Array(binary.length)
+                        for (let i = 0; i < binary.length; i++) {
+                            bytes[i] = binary.charCodeAt(i)
+                        }
+                        const file = new File([bytes], formData[key][i].filename)
+                        // 20mb default limit
+                        if(file.size < (parseInt(Bun.env.ATTACHMENT_LIMIT || "20") * 1024 * 1024)) {
+                            const attachment_id = crypto.randomUUID()
+                            await minio.putObject('attachments', attachment_id, Buffer.from(await file.arrayBuffer()), file.size, {
+                                'Content-Type': file.type,
+                                'Attachment-Expiry': Date.now() + getAttachmentExpiry(form.retention_type, form.retention_limit) * 1000
+                            })
+                            attachments.push({ name: key, key: attachment_id, filename: file.name })
+                        } else {
+                            console.warn(`Attachment exceeds ${Bun.env.ATTACHMENT_LIMIT || 20}MB`, key)
+                        }
+                    }
+                } else {
+                    fields.push({ name: key, value: Array.isArray(formData[key]) ? formData[key].join(', ') : formData[key] })
+                }
+            }
+        }
+        // add to mail queue
+        hasher.update(JSON.stringify({ form_id, fields, attachments })) // calc sha256 of data for in-queue message deduplication
+        const hex = hasher.digest("hex")
+        const existing = await valkey.get(`streams:${hex}`)
+        if(existing && !form.allow_duplicates) {
+            if(Bun.env.DEBUG == "true") console.debug('Duplicate request', hex)
+            return sendError(type, 409, 'Duplicate request', redirectFailUrl)
+        } else {
+            const stream_id = await valkey.xadd('messages', '*', 'hex', hex, 'form_id', form_id, 'fields', JSON.stringify(fields), 'origin', origin, 'attachment_count', attachments.length)
+            if(!stream_id) {
+                console.warn('Could not add message to queue', req)
+                return sendError(type, 500, 'Could not add message to queue', redirectFailUrl)
+            }
+            if(existing) {
+                await valkey.set(`streams:${hex}`, `${existing},${stream_id}`)
+            } else {
+                await valkey.set(`streams:${hex}`, stream_id)
+                if(attachments.length) {
+                    await valkey.hsetnx(`attachments:${hex}`, 'count', 0)
+                    await valkey.hset(`attachments:${hex}`, 'form_id', form_id, 'files', JSON.stringify(attachments))
+                    if(form!.retention_limit > 0 && form!.retention_type !== 'downloads') {
+                        await valkey.expire(`attachments:${hex}`, getAttachmentExpiry(form.retention_type, form.retention_limit))
+                    }
+                }
+            }
+        }
+
+        return type === 'form' ?
+            sendRedirect(redirectSuccessUrl, 'true', 'success') :
+            sendResponse('json', 200, {success: true})
+    }
+  },
   async fetch(req) {
-    // CORS
     if (req.method === 'OPTIONS') {
       return new Response(null, {
         headers: cors
       })
     }
-    // Get request data
-    let type: null | 'json' | 'form' = null
-    switch(req.headers.get('content-type')) {
-        case 'application/json':
-            type = 'json'
-            break
-        case 'application/x-www-form-urlencoded':
-        case 'multipart/form-data':
-            type = 'form'
-            break
-    }
-    const origin = req.headers.get('origin') || ''
-    // Routing
-    const url = new URL(req.url)
-    const [ _, action, form_id] = url.pathname.split('/')
-    switch(action) {
-        case 'altcha': {
-            if(req.method !== "GET") {
-                return sendError('json', 405, 'HTTP method not supported')
-            }
-            if(Bun.env.DEBUG == "true") console.debug('Altcha init', req)
-            let { handler_id, error } = await validateForm(form_id, origin)
-            if(error) {
-                console.warn('Altcha error', form_id, error?.message)
-                return sendError('json', error?.status, error.message)
-            }
-            const now = new Date()
-            const hmac = await challenge(handler_id)
-            return Response.json(hmac, { headers: {
-                ...cors,
-                Expires: new Date(now.getTime() + (parseInt(Bun.env.CAPTCHA_EXPIRE!) * 1000)).toUTCString()
-            }})
-        }
-        case 'submit': {
-            if(type === null) {
-                return sendError('form', 405, 'HTTP method not supported')
-            }
-            if(Bun.env.DEBUG == "true") console.debug('Form submission', req)
-            const formData = type === 'form' ? await req.formData() : await req.json()
-            const { error } = await validateForm(form_id, origin)
-            if(error) {
-                console.warn('Submission error', form_id, error?.message)
-                return sendError('json', error?.status, error.message)
-            }
-            const form = await db.collection('forms').getOne(form_id, {
-                expand: 'handler,handler.domains',
-                fields: '*,expand.handler.*,expand.handler.domains.name,expand.handler.domains.verified'
-            }).then(data => data).catch(() => null)
-            if(!form) {
-                console.warn('Form not found:', form_id)
-                return sendError(type, 404, 'Form not found')
-            }
-            // check redirect targets
-            let redirectSuccessUrl = form.expand?.handler.redirect_success
-            let redirectFailUrl = form.expand?.handler.redirect_fail
-            if(!redirectSuccessUrl) {
-                const redirSuccess = type === 'form' ? formData.get('redir_success') : formData.redir_success || null
-                redirectSuccessUrl = redirSuccess ? redirSuccess : req.headers.get("referer")
-            }
-            if(!redirectFailUrl) {
-                const redirFail = type === 'form' ? formData.get('redir_fail') : formData.redir_fail || null
-                redirectFailUrl = redirFail ? redirFail : redirectSuccessUrl ? redirectSuccessUrl : req.headers.get("referer")
-            }
-            // @ts-expect-error
-            const redirectSuccess: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(redirectSuccessUrl) && d.verified.includes('ownership'))
-            // @ts-expect-error
-            const redirectFail: Boolean = form.expand?.handler.expand?.domains.some(d => d.name == getDomain(redirectFailUrl) && d.verified.includes('ownership'))
-            if(!redirectSuccess || !redirectFail) {
-                console.warn(`Domain doesn't match redirect configuration for form:`, form_id)
-                return sendError(type, 400, `Redirect doesn't match domain`, null)
-            }
-            // check altcha
-            if(form.expand?.handler.altcha) {
-                const altchaData = type === 'form' ? formData.get('altcha') : formData.altcha
-                if(!altchaData) {
-                    console.warn('Altcha field missing in form:', form_id)
-                    return sendError(type, 403, 'Altcha field missing', redirectFailUrl)
-                } else {
-                    const payload = JSON.parse(atob(altchaData))
-                    const altchaResult = await verify(payload, form.handler)
-                    if(!altchaResult) {
-                        console.warn('Altcha mismatch for form:', form_id)
-                        return sendError(type, 403, 'Altcha mismatch', redirectFailUrl)
-                    }
-                }
-            }
-            // check honeypot
-            if(form.expand?.handler.honeypot.length) {
-                const honeypotData = type === 'form' ? formData.get(form.expand?.handler.honeypot) : formData[form.expand?.handler.honeypot]
-                if(!honeypotData) {
-                    console.warn('Honeypot enabled but not implemented', req)
-                    return sendError(type, 400, 'Honeypot missing', redirectFailUrl)
-                } else {
-                    if(honeypotData.length) {
-                        console.info('Bot detected!', req)
-                        return sendError(type, 403, 'Bot detected')
-                    }
-                }
-            }
-            // init data variables
-            const fields:{[x: string]: any}[] = []
-            const attachments:{name: string, key: string, filename: string}[] = []
-            // loop fields
-            if(type === 'form') {
-                for (const key of formData.keys()) {
-                    if(key === 'altcha' || key === 'redir_success' || key === 'redir_fail') continue
-                    if(form.expand?.handler.honeypot.length && key === form.expand?.handler.honeypot) continue
-                    const values: string[]|File[] = formData.getAll(key)
-                    if(values[0] instanceof File) {
-                        for(let i=0;i<values.length;i++) {
-                            const file = values[i] as File
-                            // 20mb default limit
-                            if(file.size < (parseInt(Bun.env.ATTACHMENT_LIMIT || "20") * 1024 * 1024)) {
-                                const attachment_id = crypto.randomUUID()
-                                await bucket.put({ name: attachment_id }, readableStreamFrom(await file.bytes()))
-                                attachments.push({ name: key, key: attachment_id, filename: file.name })
-                            } else {
-                                console.warn(`Attachment exceeds ${Bun.env.ATTACHMENT_LIMIT || 20}MB`, key)
-                            }
-                        }
-                    } else {
-                        fields.push({ name: key, value: values.join(', ') })
-                    }
-                }
-            } else {
-                for (const key of Object.keys(formData)) {
-                    if(key === 'altcha' || key === 'redir_success' || key === 'redir_fail') continue
-                    if(form.expand?.handler.honeypot.length && key === form.expand?.handler.honeypot) continue
-                    if(formData[key][0].constructor.name === "Object" && Object.hasOwn(formData[key][0], 'filename')) {
-                        for(let i=0;i<formData[key].length;i++) {
-                            const binary = atob(formData[key][i].filedata)
-                            const bytes = new Uint8Array(binary.length)
-                            for (let i = 0; i < binary.length; i++) {
-                                bytes[i] = binary.charCodeAt(i)
-                            }
-                            const file = new File([bytes], formData[key][i].filename)
-                            // 20mb default limit
-                            if(file.size < (parseInt(Bun.env.ATTACHMENT_LIMIT || "20") * 1024 * 1024)) {
-                                const attachment_id = crypto.randomUUID()
-                                await bucket.put({ name: attachment_id }, readableStreamFrom(await file.bytes()))
-                                attachments.push({ name: key, key: attachment_id, filename: file.name })
-                            } else {
-                                console.warn(`Attachment exceeds ${Bun.env.ATTACHMENT_LIMIT || 20}MB`, key)
-                            }
-                        }
-                    } else {
-                        fields.push({ name: key, value: Array.isArray(formData[key]) ? formData[key].join(', ') : formData[key] })
-                    }
-                }
-            }
-            // add to NATS queue
-            const data = JSON.stringify({ form_id, fields, attachments })
-            const msgHeaders = headers()
-            hasher.update(data) // calc sha256 of data for in-queue message deduplication, a.k.a. duplicate requests won't be added to the queue
-            msgHeaders.set('Nats-Msg-Id', hasher.digest("hex"))
-            nc.publish(`message.${form_id}`, data, { headers: msgHeaders })
-
-            return type === 'form' ?
-                sendRedirect(redirectSuccessUrl, 'true', 'success') :
-                sendResponse('json', 200, {success: true})
-        }
-    }
-    // 404 fallback
-    return sendResponse(type || 'form', 404, 'Route not found, please check the documentation at docs.email4.dev', true)
+    return sendResponse(getRequestType(req) || 'form', 404, 'Route not found, please check the documentation at docs.email4.dev', true)
   }
 })
+
+const getAttachmentExpiry = (retention_type: string, retention_limit: number) => {
+    let expiry = 0
+    switch(retention_type) {
+        case 'hours':
+            expiry += retention_limit * 60
+            break
+        case 'days':
+            expiry += retention_limit * 86400
+            break
+        case 'weeks':
+            expiry += retention_limit * 86400 * 7
+            break
+        case 'months':
+            expiry += retention_limit * 86400 * 30
+            break
+        default:
+            expiry += 86400 // default 1 day
+    }
+    return expiry
+}
 
 const validateForm = async (form_id: string|null, origin: string) => {
     if(!form_id) {
@@ -318,13 +743,13 @@ const validateForm = async (form_id: string|null, origin: string) => {
         const now = Date.now()
         if(!found.verified.includes('ownership') || now - last_update.getTime() > parseInt(Bun.env.VERIFICATION_EXPIRE || "24") * 60 * 60 * 1000) { // re-verify every now and then
             if(found.verified.includes('ownership')) {
-                if(Bun.env.DEBUG == "true") console.log(`Domain verification for ${found.name} has expired.`)
+                if(Bun.env.DEBUG == "true") console.debug(`Domain verification for ${found.name} has expired.`)
                 await db.collection("domains").update(found.id, {
                     "verified-": 'ownership'
                 })
             }
             hasher.update(`${found.id}_${found.created}`)
-            if(Bun.env.DEBUG == "true") console.log(`Domain verification for ${found.name} running...`)
+            if(Bun.env.DEBUG == "true") console.debug(`Domain verification for ${found.name} running...`)
             const verifyResult = await verifyDomain(found.name, hasher.digest("hex"))
             if(!verifyResult.status) {
                 console.warn(`Domain verification failed for: ${found.name}`)
@@ -346,13 +771,4 @@ const validateForm = async (form_id: string|null, origin: string) => {
         handler_id: form.handler,
         error: null
     }
-}
-
-function readableStreamFrom(data: Uint8Array): ReadableStream<Uint8Array> {
-    return new ReadableStream<Uint8Array>({
-      pull(controller) {
-        controller.enqueue(data)
-        controller.close()
-      },
-    })
 }
