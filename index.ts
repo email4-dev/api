@@ -135,6 +135,9 @@ serve({
             return sendError('json', error?.status, error.message)
         }
         const hmac = await challenge(valkey, handler_id)
+        if(Bun.env.DEBUG == "true") {
+            console.debug(`Sending response `, hmac, `with expiry at `, new Date(Date.now() + (parseInt(Bun.env.CAPTCHA_EXPIRE!) || 60 * 1000)).toUTCString(), `based on CAPTCHA_EXPIRE `, Bun.env.CAPTCHA_EXPIRE)
+        }
         return Response.json(hmac, { headers: {
             ...cors,
             Expires: new Date(Date.now() + (parseInt(Bun.env.CAPTCHA_EXPIRE!) || 60 * 1000)).toUTCString()
