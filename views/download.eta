@@ -46,7 +46,9 @@ document.addEventListener('DOMContentLoaded', function () {
 }, false)
 <% } %>
 async function download() {
+<% if (it.canDelete) { %>
     document.querySelector('.wrapper input[type="submit"]').setAttribute('disabled', 'disabled')
+<% } %>
     document.querySelector('.wrapper button').setAttribute('disabled', 'disabled')
     document.querySelector('.wrapper button').setAttribute('done', '0')
     try {
