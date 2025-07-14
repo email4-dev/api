@@ -550,7 +550,7 @@ serve({
             return sendError(type, 400, `Redirect doesn't match domain`, null)
         }
         // check altcha
-        if(form.expand?.handler.altcha) {
+        if(form.altcha) {
             const altchaData = type === 'form' ? formData.get('altcha') : formData.altcha
             if(!altchaData) {
                 console.warn('Altcha field missing in form:', form_id)
@@ -565,8 +565,8 @@ serve({
             }
         }
         // check honeypot
-        if(form.expand?.handler.honeypot.length) {
-            const honeypotData = type === 'form' ? formData.get(form.expand?.handler.honeypot) : formData[form.expand?.handler.honeypot]
+        if(form.honeypot.length) {
+            const honeypotData = type === 'form' ? formData.get(form.honeypot) : formData[form.honeypot]
             if(!honeypotData) {
                 console.warn('Honeypot enabled but not implemented', req)
                 return sendError(type, 400, 'Honeypot missing', redirectFailUrl)
@@ -582,7 +582,7 @@ serve({
         const attachments:MessageAttachment[] = []
         // skip system fields
         const skipKeys = new Set(['altcha', 'redir_success', 'redir_fail'])
-        if(form.expand?.handler.honeypot.length) skipKeys.add(form.expand?.handler.honeypot)
+        if(form.honeypot.length) skipKeys.add(form.honeypot)
         // loop fields
         if(type === 'form') {
             for(const key of formData.keys()) {
