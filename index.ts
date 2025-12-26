@@ -37,21 +37,21 @@ if(!db.authStore.isValid) {
     throw 'Pocketbase authentication failed!'
 }
 
-const valkey = new Valkey(6379, 'valkey')
+const valkey = new Valkey(6379, Bun.env.VALKEY_URL!)
 const hasher = new Bun.CryptoHasher("sha256")
+const bucket = Bun.env.S3_BUCKET!
 const minio = new Minio.Client({
-    endPoint: 'minio',
-    port: 9000,
-    accessKey: Bun.env.MINIO_ROOT_USER!,
-    secretKey: Bun.env.MINIO_ROOT_PASSWORD!,
-    useSSL: false,
-    pathStyle: true
+    endPoint: Bun.env.S3_URL!,
+    port: parseInt(Bun.env.S3_PORT!),
+    accessKey: Bun.env.S3_ACCESS_KEY!,
+    secretKey: Bun.env.S3_SECRET_KEY!,
+    useSSL: (Bun.env.S3_SSL! === "true"),
+    region: Bun.env.S3_REGION!,
 })
 
-const bucketExists = await minio.bucketExists('attachments')
+const bucketExists = await minio.bucketExists(bucket)
 if (!bucketExists) {
-  await minio.makeBucket('attachments', 'us-east-1')
-  console.log('MinIO bucket `attachments` created in "us-east-1".')
+  throw 'S3 bucket missing!'
 }
 
 valkey.on("error", (err) => {
@@ -273,7 +273,7 @@ serve({
             files: await Promise.all(fileData.map(async (f:MessageAttachment) => {
                 return {
                     name: f.filename,
-                    size: byteValueNumberFormatter.format((await minio.statObject('attachments', f.key)).size)
+                    size: byteValueNumberFormatter.format((await minio.statObject(bucket, f.key)).size)
                 }
             })),
         }), {
@@ -361,7 +361,7 @@ serve({
             }
             await valkey.del(`otp:${sessionId}`)
             const files:MessageAttachment[] = JSON.parse(download.files) || []
-            if(files.length) await minio.removeObjects('attachments', files.map(a => a.key))
+            if(files.length) await minio.removeObjects(bucket, files.map(a => a.key))
             await valkey.del(`attachments:${hex}`)
             return new Response(eta.render('deleted', {
                 pageTitle: 'Files Deleted Successfully',
@@ -451,7 +451,7 @@ serve({
 
                     try {
                         for (const file of fileData) {
-                            const fileStream = await minio.getObject('attachments', file.key)
+                            const fileStream = await minio.getObject(bucket, file.key)
                             archive.append(fileStream, { name: file.filename })
                         }
                         await archive.finalize()
@@ -467,7 +467,7 @@ serve({
                     unlinkSync(zipPath)
                     if(form.retention_limit !== 0 && form.retention_type === 'downloads' && downloadCount === form.retention_limit - 1) {
                         for (const file of fileData) {
-                           await minio.removeObject('attachments', file.key)
+                           await minio.removeObject(bucket, file.key)
                         }
                         await valkey.del(`attachments:${hex}`)
                     }
@@ -481,12 +481,12 @@ serve({
                     },
                 })
             } else {
-                const s3ObjectStats = await minio.statObject('attachments', fileData[0].key)
-                const s3Object = await minio.getObject('attachments', fileData[0].key)
+                const s3ObjectStats = await minio.statObject(bucket, fileData[0].key)
+                const s3Object = await minio.getObject(bucket, fileData[0].key)
                 // Clean up
                 s3Object.on('close', async () => {
                     if(form.retention_limit !== 0 && form.retention_type === 'downloads' && downloadCount === form.retention_limit - 1) {
-                        await minio.removeObject('attachments', fileData[0].key)
+                        await minio.removeObject(bucket, fileData[0].key)
                         await valkey.del(`attachments:${hex}`)
                     }
                 })
@@ -595,7 +595,7 @@ serve({
                         // 20mb default limit
                         if(file.size < (parseInt(Bun.env.ATTACHMENT_LIMIT || "20") * 1024 * 1024)) {
                             const attachment_id = crypto.randomUUID()
-                            await minio.putObject('attachments', attachment_id, Buffer.from(await file.arrayBuffer()), file.size, {
+                            await minio.putObject(bucket, attachment_id, Buffer.from(await file.arrayBuffer()), file.size, {
                                 'Content-Type': file.type,
                                 'Attachment-Expiry': Date.now() + getAttachmentExpiry(form.retention_type, form.retention_limit) * 1000
                             })
@@ -622,7 +622,7 @@ serve({
                         // 20mb default limit
                         if(file.size < (parseInt(Bun.env.ATTACHMENT_LIMIT || "20") * 1024 * 1024)) {
                             const attachment_id = crypto.randomUUID()
-                            await minio.putObject('attachments', attachment_id, Buffer.from(await file.arrayBuffer()), file.size, {
+                            await minio.putObject(bucket, attachment_id, Buffer.from(await file.arrayBuffer()), file.size, {
                                 'Content-Type': file.type,
                                 'Attachment-Expiry': Date.now() + getAttachmentExpiry(form.retention_type, form.retention_limit) * 1000
                             })
