@@ -30,7 +30,9 @@ console.log(`Email4.dev API v${version} starting...`)
 
 await db.collection('_superusers').authWithPassword(
     Bun.env.POCKETBASE_EMAIL!,
-    Bun.env.POCKETBASE_PASS!,
+    Bun.env.POCKETBASE_PASS!, {
+        autoRefreshThreshold: 30 * 60
+    }
 )
 
 if(!db.authStore.isValid) {
